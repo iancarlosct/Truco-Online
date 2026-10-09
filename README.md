@@ -8,7 +8,7 @@ Requisitos completos, contratos das APIs e formato das mensagens: [documento de 
 
 - Backend: Python com FastAPI
 - Frontend: HTML, CSS e JavaScript puro
-- Banco: Postgres (um schema por serviço)
+- Banco: Postgres, uma instância por serviço (`auth-db`, `lobby-db`, `ranking-db`)
 - Estado das partidas e eventos: Redis
 - Gateway: Nginx
 - Tudo roda com Docker Compose
@@ -28,7 +28,8 @@ Regras importantes:
 
 - Toda jogada é validada no Game. O frontend só envia a intenção ("jogar carta X").
 - Nenhum jogador recebe as cartas dos outros.
-- Um serviço nunca acessa o banco de outro.
+- Cada serviço tem o próprio banco e nunca acessa o de outro.
+- Game e Bots não usam Postgres: o estado das partidas fica no Redis.
 
 ## Estrutura do repositório
 
