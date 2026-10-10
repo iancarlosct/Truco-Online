@@ -14,6 +14,10 @@ const POSICOES = {
 
 const NOMES_TIPO = { mao_de_onze: "Mão de onze", mao_de_ferro: "Mão de ferro" };
 
+// Nome do pedido conforme o valor proposto, e texto do botão conforme o valor atual da mão.
+const NOME_PEDIDO = { 3: "Truco", 6: "Seis", 9: "Nove", 12: "Doze" };
+const PROXIMO_PEDIDO = { 1: "Truco", 3: "Seis", 6: "Nove", 9: "Doze", 12: "Doze" };
+
 const app = document.getElementById("app");
 
 // Último estado desenhado (usado para redesenhar quando muda algo local, como "Jogar coberta").
@@ -52,6 +56,16 @@ function derivar(estado) {
     minhaVez,
     posicaoDe: (assento) => POSICOES[n][(assento - estado.meu_assento + n) % n],
     podeJogar: minhaVez && !truco && !maoAtual.aguardando_decisao_mao_de_onze,
+    podePedirTruco:
+      minhaVez &&
+      !truco &&
+      maoAtual.valor < 12 &&
+      maoAtual.ultimo_aumento_time !== meuTime &&
+      maoAtual.tipo === "normal",
+    trucoContraMim: Boolean(truco) && truco.pedido_por_time !== meuTime,
+    decidindoMaoDeOnze: maoAtual.aguardando_decisao_mao_de_onze && estado.placar[meuTime] === 11,
+    // "Jogar coberta" só fica disponível a partir da segunda rodada da mão.
+    podeCobrir: maoAtual.rodadas.length >= 2,
   };
 }
 
@@ -64,7 +78,23 @@ export function enviar(mensagem) {
 }
 
 function jogarCarta(carta) {
-  enviar({ tipo: "jogar_carta", carta, coberta: false });
+  const podeCobrir = estadoAtual.mao_atual.rodadas.length >= 2;
+  enviar({ tipo: "jogar_carta", carta, coberta: ui.coberta && podeCobrir });
+  ui.coberta = false;
+  renderizarMesa(estadoAtual);
+}
+
+function alternarCoberta(marcada) {
+  ui.coberta = marcada;
+  renderizarMesa(estadoAtual);
+}
+
+function enviarChat(texto) {
+  if (!texto) return;
+  enviar({ tipo: "chat", texto });
+  ui.rascunhoChat = "";
+  ui.focoChat = true;
+  renderizarMesa(estadoAtual);
 }
 
 // ---------- Componentes ----------
@@ -170,6 +200,114 @@ function criarPlacar(placar, maoAtual, meuTime, timeAdversario) {
   return raiz;
 }
 
+// Texto de situação mostrado na barra de ações.
+function textoAviso(maoAtual, ctx, jogadores) {
+  const truco = maoAtual.truco_pendente;
+  if (ctx.trucoContraMim) return `Time adversário pediu ${NOME_PEDIDO[truco.valor_proposto]}!`;
+  if (truco) return `Aguardando o adversário responder ao pedido de ${NOME_PEDIDO[truco.valor_proposto]}…`;
+  if (ctx.decidindoMaoDeOnze) return "Mão de onze: seu time decide se joga ou corre.";
+  if (maoAtual.aguardando_decisao_mao_de_onze) return "Aguardando o adversário decidir a mão de onze…";
+  if (ctx.minhaVez) return "Sua vez de jogar.";
+  const daVez = jogadores.find((j) => j.assento === maoAtual.vez_assento);
+  return daVez ? `Vez de ${daVez.nome}.` : "";
+}
+
+// Botão da barra de ações: desabilitado quando não se aplica; ao clicar envia a mensagem.
+function criarBotaoAcao(texto, classes, ativo, mensagem) {
+  const botao = el("button", `botao ${classes}`, texto);
+  botao.type = "button";
+  botao.disabled = !ativo;
+  botao.addEventListener("click", () => enviar(mensagem));
+  return botao;
+}
+
+// Barra de ações abaixo da mão: aviso, truco, resposta ao truco, jogar coberta e mão de onze.
+function criarBarraAcoes(maoAtual, ctx, jogadores, coberta, aoAlternarCoberta) {
+  const barra = el("div", "barra-acoes");
+
+  const aviso = el("p", "aviso", textoAviso(maoAtual, ctx, jogadores));
+  if (ctx.trucoContraMim || ctx.decidindoMaoDeOnze) aviso.classList.add("alerta");
+
+  const controles = el("div", "controles");
+  const podeAumentar = ctx.trucoContraMim && maoAtual.truco_pendente.valor_proposto < 12;
+
+  const resposta = el("div", "grupo");
+  resposta.append(
+    criarBotaoAcao("Aceitar", "botao-aceitar", ctx.trucoContraMim, { tipo: "responder_truco", resposta: "aceitar" }),
+    criarBotaoAcao("Correr", "botao-correr", ctx.trucoContraMim, { tipo: "responder_truco", resposta: "correr" }),
+    criarBotaoAcao("Aumentar", "", podeAumentar, { tipo: "responder_truco", resposta: "aumentar" }),
+  );
+
+  const alternador = el("label", "alternador");
+  const caixa = el("input");
+  caixa.type = "checkbox";
+  caixa.disabled = !ctx.podeCobrir;
+  caixa.checked = coberta && ctx.podeCobrir;
+  caixa.addEventListener("change", () => aoAlternarCoberta(caixa.checked));
+  if (caixa.disabled) alternador.classList.add("desabilitado");
+  alternador.append(caixa, el("span", "", "Jogar coberta"));
+
+  controles.append(
+    criarBotaoAcao(PROXIMO_PEDIDO[maoAtual.valor] ?? "Truco", "botao-truco", ctx.podePedirTruco, { tipo: "pedir_truco" }),
+    el("span", "separador"),
+    resposta,
+    el("span", "separador"),
+    alternador,
+  );
+
+  // Os botões da mão de onze são os únicos que aparecem e somem.
+  if (ctx.decidindoMaoDeOnze) {
+    const onze = el("div", "grupo");
+    onze.append(
+      criarBotaoAcao("Jogar a mão", "botao-aceitar", true, { tipo: "decidir_mao_de_onze", jogar: true }),
+      criarBotaoAcao("Correr", "botao-correr", true, { tipo: "decidir_mao_de_onze", jogar: false }),
+    );
+    controles.append(el("span", "separador"), onze);
+  }
+
+  barra.append(aviso, controles);
+  return barra;
+}
+
+// Painel lateral do chat: mensagens (autor + texto), campo de texto e botão enviar.
+function criarChat(mensagens, jogadores, rascunho, aoEnviar, aoDigitar) {
+  const painel = el("aside", "chat");
+  painel.append(el("h2", "chat-titulo", "Chat"));
+
+  const lista = el("ul", "chat-mensagens");
+  if (mensagens.length === 0) lista.append(el("li", "chat-vazio", "Nenhuma mensagem ainda."));
+  for (const mensagem of mensagens) {
+    const item = el("li", "chat-mensagem");
+    // O autor ganha a cor do time quando o nome corresponde a um jogador da mesa.
+    const autor = jogadores.find((j) => j.nome === mensagem.de);
+    item.append(
+      el("span", `autor ${autor ? classeTime(autor.time) : ""}`, mensagem.de),
+      el("span", "texto", mensagem.texto),
+    );
+    lista.append(item);
+  }
+
+  const formulario = el("form", "chat-formulario");
+  const campo = el("input", "chat-campo");
+  campo.type = "text";
+  campo.placeholder = "Escreva uma mensagem…";
+  campo.maxLength = 200;
+  campo.autocomplete = "off";
+  campo.value = rascunho;
+  campo.addEventListener("input", () => aoDigitar(campo.value));
+  const botao = el("button", "botao botao-enviar", "Enviar");
+  botao.type = "submit";
+  // O envio do formulário cobre tanto o clique no botão quanto a tecla Enter.
+  formulario.addEventListener("submit", (evento) => {
+    evento.preventDefault();
+    aoEnviar(campo.value.trim());
+  });
+  formulario.append(campo, botao);
+
+  painel.append(lista, formulario);
+  return painel;
+}
+
 // ---------- Renderização ----------
 
 // Limpa a tela e redesenha tudo a partir do estado.
@@ -201,11 +339,30 @@ export function renderizarMesa(estado) {
   mesa.append(feltro);
 
   const areaMesa = el("section", "area-mesa");
-  areaMesa.append(mesa);
+  areaMesa.append(
+    mesa,
+    criarBarraAcoes(maoAtual, ctx, estado.jogadores, ui.coberta, alternarCoberta),
+  );
+
+  const chat = criarChat(estado.chat, estado.jogadores, ui.rascunhoChat, enviarChat, (texto) => {
+    ui.rascunhoChat = texto;
+  });
+
+  // Como a tela é refeita por inteiro, o foco do campo do chat é devolvido depois de redesenhar.
+  const campoChat = chat.querySelector(".chat-campo");
+  const devolverFoco = ui.focoChat;
+  campoChat.addEventListener("focus", () => { ui.focoChat = true; });
+  campoChat.addEventListener("blur", () => { ui.focoChat = false; });
 
   const tela = el("div", "tela");
-  tela.append(areaMesa);
+  tela.append(areaMesa, chat);
   app.replaceChildren(tela);
+
+  // Rolagem automática do chat até a última mensagem.
+  const mensagens = chat.querySelector(".chat-mensagens");
+  mensagens.scrollTop = mensagens.scrollHeight;
+  ui.focoChat = devolverFoco;
+  if (devolverFoco) campoChat.focus();
 }
 
 // =====================================================================================
