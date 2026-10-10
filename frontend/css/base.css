@@ -62,6 +62,8 @@ body {
   line-height: 1.4;
   color: var(--texto);
   background: var(--fundo);
+  /* Algarismos alinhados (a Georgia usa algarismos de texto por padrão) */
+  font-variant-numeric: lining-nums;
   -webkit-font-smoothing: antialiased;
 }
 
