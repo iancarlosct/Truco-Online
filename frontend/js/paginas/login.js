@@ -8,7 +8,7 @@ import { estaLogado, salvarSessao } from "../auth.js";
 // Página aberta depois do login. Ainda não existe: será criada junto com o lobby.
 const PAGINA_APOS_LOGIN = "lobby.html";
 
-// Limites dos campos.
+// Limites dos campos do cadastro.
 const NOME_MAX = 20;
 const SENHA_MIN = 6;
 
@@ -62,7 +62,11 @@ function validarEmail(email) {
   return "";
 }
 
-function validarSenha(senha) {
+function validarSenhaInformada(senha) {
+  return senha ? "" : "Informe sua senha.";
+}
+
+function validarSenhaNova(senha) {
   if (!senha) return "Informe sua senha.";
   if (tamanho(senha) < SENHA_MIN) return `A senha precisa ter no mínimo ${SENHA_MIN} caracteres.`;
   return "";
@@ -74,13 +78,14 @@ function validarConfirmacao(confirmacao, valores) {
   return "";
 }
 
-// Regras de cada formulário, pelo "name" do campo.
+// Regras de cada formulário, pelo "name" do campo. No login a senha só precisa estar
+// preenchida: o tamanho mínimo vale para quem está criando a conta.
 const REGRAS = {
-  entrar: { email: validarEmail, senha: validarSenha },
+  entrar: { email: validarEmail, senha: validarSenhaInformada },
   cadastro: {
     nome: validarNome,
     email: validarEmail,
-    senha: validarSenha,
+    senha: validarSenhaNova,
     confirmacao: validarConfirmacao,
   },
 };
