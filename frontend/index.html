@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Truco Online — Entrar</title>
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/login.css">
+</head>
+<body>
+  <main class="tela-login">
+    <!-- Começa escondido: login.js só mostra o conteúdo se o usuário ainda não estiver logado -->
+    <div class="conjunto" id="conjunto" hidden>
+      <div class="cartas-decorativas" aria-hidden="true">
+        <img class="carta-decorativa esquerda" src="assets/cartas/4_paus.svg" alt="" draggable="false">
+        <img class="carta-decorativa direita" src="assets/cartas/7_copas.svg" alt="" draggable="false">
+      </div>
+
+      <section class="cartao">
+        <header class="cabecalho">
+          <h1 class="titulo">Truco Online</h1>
+          <p class="subtitulo">Truco paulista</p>
+        </header>
+
+        <div class="abas" role="tablist" aria-label="Entrar ou criar conta">
+          <button type="button" class="aba" id="aba-entrar" role="tab" aria-controls="painel-entrar" aria-selected="true">Entrar</button>
+          <button type="button" class="aba" id="aba-cadastro" role="tab" aria-controls="painel-cadastro" aria-selected="false" tabindex="-1">Criar conta</button>
+        </div>
+
+        <!-- Erros vindos da API: credenciais inválidas, e-mail já usado, servidor indisponível -->
+        <p class="mensagem" id="mensagem" role="alert" hidden></p>
+
+        <div id="painel-entrar" role="tabpanel" aria-labelledby="aba-entrar">
+          <form class="formulario" id="form-entrar" novalidate>
+            <div class="campo">
+              <label for="entrar-email">E-mail</label>
+              <input type="email" id="entrar-email" name="email" autocomplete="username" required aria-describedby="erro-entrar-email">
+              <p class="erro-campo" id="erro-entrar-email" hidden></p>
+            </div>
+            <div class="campo">
+              <label for="entrar-senha">Senha</label>
+              <input type="password" id="entrar-senha" name="senha" autocomplete="current-password" required aria-describedby="erro-entrar-senha">
+              <p class="erro-campo" id="erro-entrar-senha" hidden></p>
+            </div>
+            <button type="submit" class="botao-principal">Entrar</button>
+          </form>
+        </div>
+
+        <div id="painel-cadastro" role="tabpanel" aria-labelledby="aba-cadastro" hidden>
+          <form class="formulario" id="form-cadastro" novalidate>
+            <div class="campo">
+              <label for="cadastro-nome">Nome <span class="dica">até 20 caracteres</span></label>
+              <input type="text" id="cadastro-nome" name="nome" autocomplete="nickname" required aria-describedby="erro-cadastro-nome">
+              <p class="erro-campo" id="erro-cadastro-nome" hidden></p>
+            </div>
+            <div class="campo">
+              <label for="cadastro-email">E-mail</label>
+              <input type="email" id="cadastro-email" name="email" autocomplete="email" required aria-describedby="erro-cadastro-email">
+              <p class="erro-campo" id="erro-cadastro-email" hidden></p>
+            </div>
+            <div class="campo">
+              <label for="cadastro-senha">Senha <span class="dica">mínimo de 6 caracteres</span></label>
+              <input type="password" id="cadastro-senha" name="senha" autocomplete="new-password" required aria-describedby="erro-cadastro-senha">
+              <p class="erro-campo" id="erro-cadastro-senha" hidden></p>
+            </div>
+            <div class="campo">
+              <label for="cadastro-confirmacao">Confirmar senha</label>
+              <input type="password" id="cadastro-confirmacao" name="confirmacao" autocomplete="new-password" required aria-describedby="erro-cadastro-confirmacao">
+              <p class="erro-campo" id="erro-cadastro-confirmacao" hidden></p>
+            </div>
+            <button type="submit" class="botao-principal">Criar conta</button>
+          </form>
+        </div>
+      </section>
+    </div>
+  </main>
+  <script type="module" src="js/paginas/login.js"></script>
+</body>
+</html>

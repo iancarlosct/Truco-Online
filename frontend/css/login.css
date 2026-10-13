@@ -1,0 +1,268 @@
+/* Tela de login e cadastro: um cartão creme, como uma carta, no centro do feltro.
+   Pensada para desktop, mas o cartão se ajusta a janelas estreitas. */
+
+:root {
+  --largura-cartao: 400px;
+
+  /* Altura aproximada do conjunto com a aba "Criar conta" aberta. É a referência para
+     centralizar na vertical sem que o topo mude de lugar ao trocar de aba. */
+  --altura-conjunto: 610px;
+
+  /* Largura das cartas decorativas (altura = largura * 1.4, proporção dos SVGs) */
+  --carta-l: 96px;
+}
+
+/* O atributo hidden tem que vencer os "display" definidos mais abaixo */
+[hidden] {
+  display: none !important;
+}
+
+/* ---------- Fundo: feltro ---------- */
+
+/* Mesmo degradê e mesma textura (ruído gerado em SVG embutido) do feltro da mesa */
+body {
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 .17 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"),
+    radial-gradient(ellipse at 50% 42%, var(--feltro-claro) 0%, var(--feltro) 48%, var(--feltro-escuro) 100%);
+}
+
+/* Linha de costura do feltro, acompanhando a borda da janela */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 14px;
+  border: 1px dashed rgba(251, 248, 241, 0.13);
+  border-radius: 18px;
+  pointer-events: none;
+}
+
+.tela-login {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-height: 100vh;
+  padding: max(24px, calc((100vh - var(--altura-conjunto)) / 2)) 16px 32px;
+}
+
+/* ---------- Conjunto: cartas decorativas saindo de trás do cartão ---------- */
+
+.conjunto {
+  position: relative;
+  width: min(100%, var(--largura-cartao));
+  padding-top: calc(var(--carta-l) * 0.64);
+}
+
+.carta-decorativa {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: var(--carta-l);
+  height: calc(var(--carta-l) * 1.4);
+  max-width: none;
+  margin-left: calc(var(--carta-l) / -2);
+  border-radius: calc(var(--carta-l) * 0.052);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.4),
+    0 4px 10px rgba(0, 0, 0, 0.3);
+  transform-origin: 50% 100%;
+  user-select: none;
+}
+
+.carta-decorativa.esquerda {
+  transform: translateX(-40%) rotate(-11deg);
+}
+
+.carta-decorativa.direita {
+  transform: translateX(40%) rotate(9deg);
+}
+
+/* ---------- Cartão ---------- */
+
+.cartao {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 28px 32px 30px;
+  border: 1px solid var(--borda-carta);
+  border-radius: 16px;
+  background: var(--creme);
+  color: var(--tinta);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.4),
+    0 18px 40px rgba(0, 0, 0, 0.45);
+}
+
+/* Filete dourado por dentro da borda, como no ás de espadas */
+.cartao::before {
+  content: "";
+  position: absolute;
+  inset: 7px;
+  border: 1px solid rgba(168, 134, 47, 0.5);
+  border-radius: 10px;
+  pointer-events: none;
+}
+
+.cabecalho {
+  text-align: center;
+}
+
+.titulo {
+  font-family: var(--fonte-titulo);
+  font-size: 34px;
+  font-weight: 700;
+  line-height: 1.15;
+}
+
+.subtitulo {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+  margin-top: 3px;
+  color: var(--tinta-suave);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+/* Filetes dourados dos dois lados do subtítulo */
+.subtitulo::before,
+.subtitulo::after {
+  content: "";
+  width: 30px;
+  height: 1px;
+  background: rgba(168, 134, 47, 0.7);
+}
+
+/* ---------- Abas ---------- */
+
+.abas {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 10px;
+  background: var(--creme-escuro);
+}
+
+.aba {
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--tinta-suave);
+  font-weight: 600;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.aba:not(:disabled):hover {
+  color: var(--tinta);
+}
+
+.aba[aria-selected="true"] {
+  background: #fff;
+  color: var(--tinta);
+  box-shadow: 0 1px 2px rgba(36, 39, 44, 0.25);
+}
+
+/* ---------- Mensagem de erro da API ---------- */
+
+.mensagem {
+  padding: 9px 12px;
+  border: 1px solid rgba(191, 36, 44, 0.35);
+  border-radius: var(--raio);
+  background: rgba(191, 36, 44, 0.08);
+  color: var(--tinta-vermelha);
+  font-size: 14px;
+}
+
+/* ---------- Formulários ---------- */
+
+.formulario {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.campo {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.campo label {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.campo .dica {
+  color: var(--tinta-suave);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.campo input {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid rgba(36, 39, 44, 0.45);
+  border-radius: var(--raio);
+  background: #fff;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.campo input[aria-invalid="true"] {
+  border-color: var(--tinta-vermelha);
+  box-shadow: 0 0 0 1px var(--tinta-vermelha);
+}
+
+.erro-campo {
+  color: var(--tinta-vermelha);
+  font-size: 12.5px;
+}
+
+.botao-principal {
+  margin-top: 6px;
+  padding: 10px 16px;
+  border: 1px solid var(--tinta);
+  border-radius: var(--raio);
+  background: var(--tinta);
+  color: var(--creme);
+  font-family: var(--fonte-titulo);
+  font-size: 17px;
+  font-weight: 700;
+  transition: filter 0.15s ease, opacity 0.15s ease;
+}
+
+.botao-principal:not(:disabled):hover {
+  filter: brightness(1.5);
+}
+
+.botao-principal:disabled {
+  opacity: 0.6;
+}
+
+/* Sobre o creme o contorno de foco usa o dourado escuro, que contrasta mais */
+.aba:focus-visible,
+.campo input:focus-visible,
+.botao-principal:focus-visible {
+  outline: 2px solid var(--dourado-escuro);
+  outline-offset: 2px;
+}
+
+.campo input[aria-invalid="true"]:focus-visible {
+  outline-color: var(--tinta-vermelha);
+}
+
+/* ---------- Janelas estreitas ---------- */
+
+@media (max-width: 420px) {
+  .cartao {
+    padding: 24px 20px 26px;
+  }
+}

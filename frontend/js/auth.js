@@ -39,7 +39,8 @@ export function estaLogado() {
 }
 
 // Para as páginas que exigem login: sem token, manda para a tela de login.
-// Devolve true quando há sessão; com false a página não deve continuar a se montar.
+// Devolve true quando há sessão; com false a página não deve continuar a se montar:
+//   if (exigirLogin()) iniciar();
 export function exigirLogin() {
   if (estaLogado()) return true;
   location.replace(PAGINA_LOGIN);
