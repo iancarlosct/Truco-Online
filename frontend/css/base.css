@@ -1,0 +1,101 @@
+/* Base compartilhada entre as telas: variáveis de cores e fontes + reset. */
+
+:root {
+  /* Cartas (mesmas cores usadas nos SVGs) */
+  --creme: #FBF8F1;
+  --creme-escuro: #EDE6D6;
+  --borda-carta: #C8BFAD;
+  --tinta: #24272C;
+  --tinta-suave: #5A5F68;
+  --verso: #173B48;
+
+  /* Feltro e madeira da mesa */
+  --feltro-claro: #2F8558;
+  --feltro: #1F6B45;
+  --feltro-escuro: #113B27;
+  --madeira-clara: #8A5A33;
+  --madeira: #5E3A1E;
+  --madeira-escura: #38210F;
+
+  /* Interface em volta da mesa */
+  --fundo: #17191D;
+  --painel: #1F2227;
+  --painel-claro: #2A2E35;
+  --painel-borda: #363B44;
+  --texto: #F1EDE3;
+  --texto-suave: #A9A69D;
+
+  /* Destaques */
+  --dourado: #D9B45B;
+  --dourado-escuro: #A8862F;
+  --verde-acao: #3E9C68;
+  --vermelho-acao: #C9553F;
+
+  /* Times */
+  --time-a: #5AA9E6;
+  --time-b: #E4674F;
+  --empate: #9AA0A6;
+
+  /* Fontes (somente fontes do sistema, sem dependências externas) */
+  --fonte-texto: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --fonte-titulo: Georgia, "Times New Roman", serif;
+
+  --raio: 8px;
+}
+
+/* Reset */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--fonte-texto);
+  font-size: 15px;
+  line-height: 1.4;
+  color: var(--texto);
+  background: var(--fundo);
+  /* Algarismos alinhados (a Georgia usa algarismos de texto por padrão) */
+  font-variant-numeric: lining-nums;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, h4, p, ul, ol {
+  margin: 0;
+  padding: 0;
+}
+
+ul, ol {
+  list-style: none;
+}
+
+img {
+  display: block;
+  max-width: 100%;
+}
+
+button,
+input,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: default;
+}
+
+/* Cor do time: use junto com var(--cor-time) no elemento */
+.time-a { --cor-time: var(--time-a); }
+.time-b { --cor-time: var(--time-b); }

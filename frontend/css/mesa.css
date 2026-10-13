@@ -1,0 +1,689 @@
+/* Tela da mesa de jogo. Somente desktop (largura mínima de 1200px). */
+
+:root {
+  --largura-chat: 300px;
+
+  /* Largura das cartas em cada contexto (altura = largura * 1.4, proporção dos SVGs) */
+  --carta-mao-l: clamp(96px, 14vh, 128px);
+  --carta-mesa-l: clamp(72px, min(10.5vh, 6.5vw), 96px);
+  --carta-op-l: clamp(40px, 6vh, 52px);
+}
+
+html {
+  overflow: auto;
+}
+
+body {
+  min-width: 1200px;
+}
+
+/* ---------- Estrutura geral ---------- */
+
+.tela {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--largura-chat);
+  height: 100vh;
+  min-height: 680px;
+}
+
+.area-mesa {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  min-height: 0;
+  padding: 14px 14px 12px;
+  background: radial-gradient(ellipse at 50% 35%, #272B32 0%, var(--fundo) 70%);
+}
+
+/* ---------- Mesa: moldura de madeira + feltro ---------- */
+
+.mesa {
+  flex: 1;
+  min-height: 0;
+  padding: 16px;
+  border-radius: 40px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0) 30%, rgba(0, 0, 0, 0.28) 100%),
+    repeating-linear-gradient(92deg, rgba(0, 0, 0, 0.1) 0 2px, rgba(255, 255, 255, 0.03) 2px 5px, rgba(0, 0, 0, 0) 5px 11px),
+    linear-gradient(180deg, var(--madeira-clara), var(--madeira) 45%, var(--madeira-escura));
+  box-shadow:
+    0 0 0 1px #1D1108,
+    0 14px 34px rgba(0, 0, 0, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+.feltro {
+  position: relative;
+  height: 100%;
+  border-radius: 26px;
+  background: radial-gradient(ellipse at 50% 42%, var(--feltro-claro) 0%, var(--feltro) 48%, var(--feltro-escuro) 100%);
+  box-shadow:
+    inset 0 0 0 2px rgba(0, 0, 0, 0.5),
+    inset 0 0 0 3px rgba(217, 180, 91, 0.38),
+    inset 0 6px 28px rgba(0, 0, 0, 0.55),
+    inset 0 0 90px rgba(0, 0, 0, 0.35);
+}
+
+/* Textura do feltro (ruído gerado em SVG embutido) e linha de costura */
+.feltro::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 .55 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  opacity: 0.3;
+  outline: 1px dashed rgba(251, 248, 241, 0.13);
+  outline-offset: -13px;
+  pointer-events: none;
+}
+
+/* ---------- Cartas ---------- */
+
+.carta {
+  width: var(--l);
+  height: calc(var(--l) * 1.4);
+  max-width: none;
+  border-radius: calc(var(--l) * 0.052);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.4),
+    0 4px 10px rgba(0, 0, 0, 0.3);
+  user-select: none;
+}
+
+/* ---------- Jogadores ---------- */
+
+.jogador {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.jogador.pos-cima {
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.jogador.pos-baixo {
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.jogador.pos-esquerda {
+  left: 20px;
+  top: 44%;
+  transform: translateY(-50%);
+}
+
+.jogador.pos-direita {
+  right: 20px;
+  top: 44%;
+  transform: translateY(-50%);
+}
+
+.plaquinha {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px 4px 9px;
+  border: 1px solid rgba(251, 248, 241, 0.16);
+  border-radius: 999px;
+  background: rgba(12, 22, 17, 0.74);
+  color: var(--texto);
+  font-size: 14px;
+  white-space: nowrap;
+  transition: box-shadow 0.2s ease, border-color 0.2s ease, background-color 0.2s ease;
+}
+
+.plaquinha .cor-time {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--cor-time);
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.35);
+}
+
+.plaquinha .nome {
+  font-weight: 600;
+}
+
+.plaquinha .voce {
+  color: var(--texto-suave);
+  font-size: 12px;
+}
+
+.selo-bot {
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--creme);
+  color: var(--tinta);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.selo-vez {
+  display: none;
+  color: var(--dourado);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* Destaque de quem está na vez */
+.jogador.na-vez .plaquinha {
+  border-color: var(--dourado);
+  background: rgba(40, 33, 12, 0.9);
+  box-shadow:
+    0 0 0 2px rgba(217, 180, 91, 0.5),
+    0 0 20px rgba(217, 180, 91, 0.6);
+}
+
+.jogador.na-vez .selo-vez {
+  display: inline;
+}
+
+/* ---------- Mãos dos outros jogadores (versos, voltadas para o centro) ---------- */
+
+.mao-oculta {
+  --l: var(--carta-op-l);
+  display: flex;
+  min-height: calc(var(--l) * 1.4);
+}
+
+.mao-oculta .espaco + .espaco {
+  margin-left: calc(var(--l) * -0.35);
+}
+
+.pos-cima .mao-oculta .carta {
+  transform: rotate(180deg);
+}
+
+/* Nas laterais as cartas ficam deitadas: o espaço ocupa a carta girada em 90 graus */
+.pos-esquerda .mao-oculta,
+.pos-direita .mao-oculta {
+  flex-direction: column;
+  min-height: 0;
+  min-width: calc(var(--l) * 1.4);
+}
+
+.pos-esquerda .mao-oculta .espaco,
+.pos-direita .mao-oculta .espaco {
+  position: relative;
+  width: calc(var(--l) * 1.4);
+  height: var(--l);
+}
+
+.pos-esquerda .mao-oculta .espaco + .espaco,
+.pos-direita .mao-oculta .espaco + .espaco {
+  margin-left: 0;
+  margin-top: calc(var(--l) * -0.35);
+}
+
+.pos-esquerda .mao-oculta .carta,
+.pos-direita .mao-oculta .carta {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+}
+
+.pos-esquerda .mao-oculta .carta {
+  transform: translate(-50%, -50%) rotate(90deg);
+}
+
+.pos-direita .mao-oculta .carta {
+  transform: translate(-50%, -50%) rotate(-90deg);
+}
+
+/* ---------- Sua mão ---------- */
+
+.mao {
+  --l: var(--carta-mao-l);
+  display: flex;
+  gap: 12px;
+  min-height: calc(var(--l) * 1.4);
+}
+
+.carta-mao {
+  padding: 0;
+  border: 0;
+  border-radius: calc(var(--l) * 0.052);
+  background: none;
+  transition: transform 0.15s ease, filter 0.15s ease;
+}
+
+.carta-mao:disabled {
+  filter: brightness(0.86);
+}
+
+.carta-mao:not(:disabled) .carta {
+  box-shadow:
+    0 0 0 2px rgba(217, 180, 91, 0.8),
+    0 6px 14px rgba(0, 0, 0, 0.4);
+}
+
+/* Mesmo sem poder jogar, a carta sobe um pouco no hover; quando é jogável sobe mais */
+.carta-mao:hover {
+  transform: translateY(-6px);
+  filter: none;
+}
+
+.carta-mao:not(:disabled):hover,
+.carta-mao:not(:disabled):focus-visible {
+  transform: translateY(-18px);
+  outline: none;
+}
+
+/* ---------- Centro: cartas jogadas, vira e rodadas ---------- */
+
+/* Ponto de referência no meio da área livre; os filhos se posicionam a partir dele */
+.centro {
+  --l: var(--carta-mesa-l);
+  position: absolute;
+  left: 50%;
+  top: 43%;
+  width: 0;
+  height: 0;
+}
+
+.centro::before {
+  content: "";
+  position: absolute;
+  width: calc(var(--l) * 3.5);
+  height: calc(var(--l) * 3);
+  transform: translate(-50%, -50%);
+  border: 1px solid rgba(251, 248, 241, 0.09);
+  border-radius: 50%;
+  background: radial-gradient(ellipse, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0) 70%);
+}
+
+/* Cada carta jogada é deslocada para o lado de quem jogou */
+.jogada {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform: translate(-50%, -50%) translate(var(--dx, 0px), var(--dy, 0px)) rotate(var(--giro, 0deg));
+}
+
+.jogada.pos-baixo {
+  --dy: calc(var(--l) * 0.5);
+  --giro: 2deg;
+}
+
+.jogada.pos-cima {
+  --dy: calc(var(--l) * -0.5);
+  --giro: -3deg;
+}
+
+.jogada.pos-esquerda {
+  --dx: calc(var(--l) * -0.8);
+  --giro: -7deg;
+}
+
+.jogada.pos-direita {
+  --dx: calc(var(--l) * 0.8);
+  --giro: 6deg;
+}
+
+.rotulo-mesa {
+  color: rgba(251, 248, 241, 0.75);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.vira {
+  --l: calc(var(--carta-mesa-l) * 0.82);
+  position: absolute;
+  left: calc(var(--carta-mesa-l) * 1.95);
+  top: 0;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+}
+
+.manilha {
+  padding: 2px 10px;
+  border: 1px solid rgba(217, 180, 91, 0.55);
+  border-radius: 999px;
+  background: rgba(12, 22, 17, 0.6);
+  color: var(--texto);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.manilha strong {
+  color: var(--dourado);
+  font-family: var(--fonte-titulo);
+  font-size: 15px;
+}
+
+.rodadas {
+  position: absolute;
+  right: calc(var(--carta-mesa-l) * 1.95);
+  top: 0;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 9px;
+}
+
+.marcadores {
+  display: flex;
+  gap: 8px;
+}
+
+/* Vazio = rodada ainda não jogada */
+.marcador {
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(251, 248, 241, 0.4);
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.22);
+}
+
+.marcador.time-a,
+.marcador.time-b {
+  border-color: rgba(0, 0, 0, 0.35);
+  background: var(--cor-time);
+}
+
+.marcador.empate {
+  border-color: rgba(0, 0, 0, 0.35);
+  background: var(--empate);
+}
+
+.marcador.atual {
+  box-shadow: 0 0 0 3px rgba(217, 180, 91, 0.45);
+}
+
+/* ---------- Placar ---------- */
+
+.placar {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  min-width: 176px;
+  padding: 10px 12px;
+  border: 1px solid rgba(217, 180, 91, 0.4);
+  border-radius: 12px;
+  background: rgba(12, 22, 17, 0.8);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
+}
+
+.placar-times {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.placar-time {
+  padding: 4px 8px 6px;
+  border-top: 3px solid var(--cor-time);
+  border-radius: 6px;
+  background: rgba(251, 248, 241, 0.06);
+  text-align: center;
+}
+
+.placar-time .rotulo {
+  display: block;
+  color: var(--texto-suave);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.placar-time .pontos {
+  display: block;
+  font-family: var(--fonte-titulo);
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.placar-mao {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-top: 8px;
+  color: var(--texto-suave);
+  font-size: 12px;
+}
+
+.placar-mao strong {
+  color: var(--dourado);
+  font-family: var(--fonte-titulo);
+  font-size: 17px;
+}
+
+.selo-tipo {
+  margin-top: 8px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: var(--dourado);
+  color: var(--tinta);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+/* ---------- Barra de ações ---------- */
+
+.barra-acoes {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px 10px;
+  border: 1px solid var(--painel-borda);
+  border-radius: 14px;
+  background: var(--painel);
+}
+
+.aviso {
+  min-height: 20px;
+  color: var(--texto-suave);
+  font-size: 13px;
+}
+
+.aviso.alerta {
+  color: var(--dourado);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.controles,
+.grupo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.separador {
+  width: 1px;
+  height: 24px;
+  margin: 0 4px;
+  background: var(--painel-borda);
+}
+
+.botao {
+  min-width: 84px;
+  padding: 7px 14px;
+  border: 1px solid var(--painel-borda);
+  border-radius: var(--raio);
+  background: var(--painel-claro);
+  color: var(--texto);
+  font-weight: 600;
+  transition: background-color 0.15s ease, border-color 0.15s ease, filter 0.15s ease;
+}
+
+.botao:not(:disabled):hover {
+  filter: brightness(1.15);
+}
+
+.botao:focus-visible,
+.chat-campo:focus-visible,
+.alternador input:focus-visible {
+  outline: 2px solid var(--dourado);
+  outline-offset: 2px;
+}
+
+.botao:disabled {
+  opacity: 0.38;
+}
+
+.botao-truco {
+  min-width: 96px;
+  border-color: var(--dourado-escuro);
+  background: var(--dourado);
+  color: var(--tinta);
+  font-family: var(--fonte-titulo);
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.botao-aceitar {
+  border-color: var(--verde-acao);
+  background: var(--verde-acao);
+  color: #fff;
+}
+
+.botao-correr {
+  border-color: var(--vermelho-acao);
+  background: transparent;
+  color: #F0907C;
+}
+
+.alternador {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 10px;
+  border-radius: var(--raio);
+  cursor: pointer;
+  user-select: none;
+}
+
+.alternador input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--dourado);
+  cursor: inherit;
+}
+
+.alternador.desabilitado {
+  opacity: 0.38;
+  cursor: default;
+}
+
+/* ---------- Chat ---------- */
+
+.chat {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-left: 1px solid var(--painel-borda);
+  background: var(--painel);
+}
+
+.chat-titulo {
+  padding: 14px 16px 12px;
+  border-bottom: 1px solid var(--painel-borda);
+  font-family: var(--fonte-titulo);
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.chat-mensagens {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 16px;
+}
+
+.chat-mensagem {
+  padding: 6px 10px;
+  border-radius: var(--raio);
+  background: var(--painel-claro);
+  overflow-wrap: anywhere;
+}
+
+.chat-mensagem .autor {
+  display: block;
+  color: var(--cor-time, var(--texto-suave));
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.chat-vazio {
+  color: var(--texto-suave);
+  font-size: 13px;
+  text-align: center;
+}
+
+.chat-formulario {
+  display: flex;
+  gap: 8px;
+  padding: 12px;
+  border-top: 1px solid var(--painel-borda);
+}
+
+.chat-campo {
+  flex: 1;
+  min-width: 0;
+  padding: 7px 10px;
+  border: 1px solid var(--painel-borda);
+  border-radius: var(--raio);
+  background: var(--fundo);
+}
+
+.chat-campo::placeholder {
+  color: var(--texto-suave);
+}
+
+.botao-enviar {
+  min-width: 0;
+}
+
+/* ---------- Seletor de mock (FERRAMENTA DE DESENVOLVIMENTO: remover depois) ---------- */
+
+.dev-seletor-mock {
+  position: fixed;
+  top: 36px;
+  right: calc(var(--largura-chat) + 40px);
+  z-index: 10;
+  padding: 1px 4px;
+  border: 1px dashed rgba(251, 248, 241, 0.5);
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.55);
+  color: var(--texto);
+  font-size: 11px;
+  opacity: 0.45;
+  transition: opacity 0.15s ease;
+}
+
+.dev-seletor-mock:hover,
+.dev-seletor-mock:focus {
+  opacity: 1;
+}
+
+.dev-seletor-mock option {
+  color: #000;
+}
