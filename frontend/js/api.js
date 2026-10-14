@@ -26,8 +26,9 @@ const PREFIXO = "/api";
 // Tempo máximo de espera pela resposta antes de desistir da requisição.
 const TEMPO_LIMITE_MS = 10000;
 
-// Tela de login, para onde vai quem tem a sessão recusada pelo servidor.
-const PAGINA_LOGIN = "index.html";
+// Para onde vai quem tem a sessão recusada pelo servidor: a tela de login, com o parâmetro
+// que faz ela avisar que a sessão expirou (ver login.js).
+const PAGINA_SESSAO_EXPIRADA = "index.html?sessao=expirada";
 
 // Rotas que não exigem login (pelo contrato, todas as outras exigem o token). Nelas um 401
 // quer dizer e-mail ou senha incorretos, e não sessão vencida.
@@ -65,10 +66,11 @@ function mensagemPadrao(status) {
 }
 
 // Resposta 401 numa rota que exige login: o token venceu ou não vale mais. Apaga a sessão e
-// volta para a tela de login. Fica aqui, e não em cada tela, para valer em todas elas.
+// volta para a tela de login, que avisa o motivo. Fica aqui, e não em cada tela, para valer em
+// todas elas.
 function encerrarSessao() {
   sair();
-  location.replace(PAGINA_LOGIN);
+  location.replace(PAGINA_SESSAO_EXPIRADA);
 }
 
 // Chama uma rota da API e devolve o corpo da resposta, já convertido de JSON.

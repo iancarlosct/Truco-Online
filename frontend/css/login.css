@@ -173,6 +173,13 @@ body::before {
   font-size: 14px;
 }
 
+/* Aviso de sessão expirada: a mesma caixa, em tom neutro, porque não é um erro do usuário */
+.mensagem.info {
+  border-color: var(--borda-carta);
+  background: var(--creme-escuro);
+  color: var(--tinta-suave);
+}
+
 /* ---------- Formulários ---------- */
 
 .formulario {
