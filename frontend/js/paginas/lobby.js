@@ -6,11 +6,23 @@
 // Os dados chegam por atualização periódica (polling) a cada 3 segundos. Quem fala com o
 // backend é o api.js, e quem decide se uma ação vale é o servidor.
 
-import { ErroApi, criarSala, entrarNaSala, listarSalas, obterRanking, obterSala, sairDaSala } from "../api.js";
+import {
+  ErroApi,
+  adicionarBot,
+  criarSala,
+  entrarNaSala,
+  iniciarPartida,
+  liberarAssento,
+  listarSalas,
+  obterRanking,
+  obterSala,
+  sairDaSala,
+} from "../api.js";
 import { exigirLogin, obterUsuario, sair } from "../auth.js";
 import { criarVerso } from "../cartas.js";
 
 const PAGINA_LOGIN = "index.html";
+const PAGINA_MESA = "mesa.html";
 
 // Intervalo da atualização periódica e tempo que um aviso fica na tela.
 const INTERVALO_ATUALIZACAO_MS = 3000;
@@ -19,11 +31,28 @@ const DURACAO_AVISO_MS = 6000;
 // Linhas do ranking que aparecem no painel.
 const TAMANHO_RANKING = 10;
 
+// Posição na tela de cada assento relativo ao jogador (sentido anti-horário), como na mesa.
+const POSICOES = {
+  2: ["baixo", "cima"],
+  4: ["baixo", "direita", "cima", "esquerda"],
+};
+
+// Lugar da mesa em palavras, para os rótulos lidos pelo leitor de tela.
+const NOME_POSICAO = { baixo: "de baixo", cima: "da frente", direita: "da direita", esquerda: "da esquerda" };
+
+// Ordem de leitura das posições (de cima para baixo, da esquerda para a direita). Os assentos
+// entram no DOM nessa ordem para o Tab percorrer a mesa na ordem em que ela é vista.
+const ORDEM_POSICOES = ["cima", "esquerda", "direita", "baixo"];
+
 // Texto do botão enquanto a requisição dele está em andamento, pelo tipo da ação (o começo
 // da chave do botão, antes do ":").
 const TEXTO_ESPERA = {
   criar: "Criando…",
   entrar: "Entrando…",
+  sentar: "Sentando…",
+  bot: "Adicionando…",
+  remover: "Removendo…",
+  iniciar: "Iniciando…",
   sair: "Saindo…",
   logout: "Saindo…",
 };
@@ -42,6 +71,7 @@ const estado = {
   salaId: null, // sala aberta (vista da sala); null = vista da lista
   salas: null, // última lista de salas recebida; null enquanto carrega
   sala: null, // última versão da sala aberta; null enquanto carrega
+  estavaNaSala: false, // se o usuário estava sentado na versão anterior da sala (para notar a remoção)
   acao: null, // chave do botão cuja requisição está em andamento
   aviso: null, // { texto, tipo: "erro" | "info", daAtualizacao }
   ranking: { situacao: "carregando" }, // depois { situacao: "pronto", linhas } ou { situacao: "erro", mensagem }
@@ -89,6 +119,14 @@ function textoDoErro(erro) {
   return "Algo deu errado. Tente de novo.";
 }
 
+// Resposta 401: o api.js já apagou a sessão e está levando para a tela de login. Aqui a tela
+// só para de atualizar, sem aviso. Devolve true nesse caso.
+function sessaoEncerrada(erro) {
+  if (!(erro instanceof ErroApi) || erro.status !== 401) return false;
+  pararTudo();
+  return true;
+}
+
 // Troca o conteúdo de uma região da tela. Se o foco estava num botão que continua existindo
 // no desenho novo (mesma data-chave), ele volta para esse botão: sem isso, quem usa o teclado
 // perderia o lugar a cada atualização.
@@ -96,14 +134,14 @@ function trocarConteudo(regiao, ...filhos) {
   const ativo = document.activeElement;
   const chave = regiao.contains(ativo) ? ativo.dataset.chave : undefined;
   regiao.replaceChildren(...filhos);
-  if (chave) regiao.querySelector(`[data-chave="${chave}"]`)?.focus();
+  if (chave) regiao.querySelector(`[data-chave="${CSS.escape(chave)}"]`)?.focus();
 }
 
 // Quando o foco se perde (o botão clicado sumiu ou ficou desabilitado), ele vai para o botão
 // indicado, se ainda existir e estiver habilitado, ou para o título da vista.
 function garantirFoco(chave) {
   if (document.activeElement && document.activeElement !== document.body) return;
-  const botao = chave && vista.querySelector(`[data-chave="${chave}"]`);
+  const botao = chave && vista.querySelector(`[data-chave="${CSS.escape(chave)}"]`);
   if (botao && !botao.disabled) botao.focus();
   else document.getElementById("titulo-vista")?.focus();
 }
@@ -247,6 +285,108 @@ function criarListaVazia() {
 
 // ---------- Vista 2: sala de espera ----------
 
+// Reúne o que a vista da sala precisa saber e que é derivado da sala recebida.
+function derivarSala(sala) {
+  const n = sala.assentos.length;
+  const meuAssento = sala.assentos.find((a) => a.usuario_id === usuario.id) ?? null;
+  // Quem ainda não está sentado (abriu o link da sala, por exemplo) vê a mesa a partir do
+  // assento 0.
+  const referencia = meuAssento ? meuAssento.assento : 0;
+  return {
+    meuAssento,
+    souDono: sala.dono_id === usuario.id,
+    duplas: n === 4,
+    vagas: sala.assentos.filter((a) => !ocupado(a)).length,
+    posicaoDe: (assento) => POSICOES[n][(assento - referencia + n) % n],
+  };
+}
+
+// Assento ocupado: plaquinha com a cor do time, o nome e os selos; para o dono, o botão de
+// remover os outros. Assento vago: botão para sentar (ou trocar de lugar) e, para o dono, o
+// botão de pôr um bot.
+function criarAssento(assento, sala, ctx) {
+  const numero = assento.assento;
+  const time = timeDoAssento(numero);
+  const posicao = ctx.posicaoDe(numero);
+  const raiz = el("div", `assento pos-${posicao} ${classeTime(time)}`);
+  // No 2x2 o assento define o time, então o time aparece escrito.
+  if (ctx.duplas) raiz.append(el("span", "rotulo-time", `Time ${time}`));
+
+  if (ocupado(assento)) {
+    const souEu = assento.usuario_id === usuario.id;
+    if (souEu) raiz.classList.add("meu");
+    const plaquinha = el("div", "plaquinha");
+    plaquinha.title = `Time ${time}`;
+    plaquinha.append(el("span", "cor-time"), el("span", "nome", assento.nome));
+    if (souEu) plaquinha.append(el("span", "voce", "(você)"));
+    if (assento.bot) plaquinha.append(el("span", "selo-bot", "BOT"));
+    if (assento.usuario_id && assento.usuario_id === sala.dono_id) plaquinha.append(el("span", "selo-dono", "dono"));
+    raiz.append(plaquinha);
+
+    if (ctx.souDono && !souEu) {
+      const remover = botaoDeAcao(`remover:${numero}`, "Remover", "botao botao-pequeno botao-remover", () =>
+        removerDoAssento(numero),
+      );
+      remover.setAttribute("aria-label", `Remover ${assento.nome} da sala`);
+      raiz.append(remover);
+    }
+    return raiz;
+  }
+
+  const lugar = `lugar ${NOME_POSICAO[posicao]}${ctx.duplas ? `, time ${time}` : ""}`;
+  const vaga = botaoDeAcao(`sentar:${numero}`, ctx.meuAssento ? "Trocar para cá" : "Sentar aqui", "vaga", () => sentar(numero));
+  vaga.prepend(el("span", "cor-time"));
+  vaga.setAttribute("aria-label", `${vaga.textContent}: ${lugar}`);
+  raiz.append(vaga);
+
+  if (ctx.souDono) {
+    const bot = botaoDeAcao(`bot:${numero}`, "Adicionar bot", "botao botao-pequeno", () => colocarBot(numero));
+    bot.setAttribute("aria-label", `${bot.textContent} no ${lugar}`);
+    raiz.append(bot);
+  }
+  return raiz;
+}
+
+// Centro da mesa: o baralho esperando e quantos lugares faltam.
+function criarCentroSala(sala, ctx) {
+  const centro = el("div", "centro-sala");
+  const baralho = el("div", "baralho");
+  baralho.setAttribute("aria-hidden", "true");
+  for (let i = 0; i < 3; i++) baralho.append(criarVerso());
+
+  const total = sala.assentos.length;
+  let falta = "Mesa completa";
+  if (ctx.vagas === 1) falta = "Falta 1 jogador";
+  else if (ctx.vagas > 1) falta = `Faltam ${ctx.vagas} jogadores`;
+
+  centro.append(
+    baralho,
+    el("p", "ocupacao", `${total - ctx.vagas} de ${total} jogadores`),
+    el("p", `falta${ctx.vagas === 0 ? " completa" : ""}`, falta),
+  );
+  return centro;
+}
+
+// Barra abaixo da mesa: sair, a situação da sala e, para o dono, o botão de iniciar.
+function criarBarraSala(ctx) {
+  const barra = el("div", "barra-sala");
+
+  const sairOuVoltar = ctx.meuAssento
+    ? botaoDeAcao("sair", "Sair da sala", "botao", sairDaSalaAtual)
+    : criarBotao("voltar-lista", "Voltar à lista", "botao", () => voltarParaLista());
+
+  let situacao;
+  if (!ctx.meuAssento) situacao = ctx.vagas ? "Escolha um lugar vago para entrar na sala." : "Esta sala está cheia.";
+  else if (!ctx.souDono) situacao = "Aguardando o dono iniciar…";
+  else if (ctx.vagas) situacao = "Complete a mesa com jogadores ou bots para iniciar.";
+  else situacao = "Mesa completa: já dá para iniciar.";
+
+  barra.append(sairOuVoltar, el("p", "situacao", situacao));
+  // O botão fica desabilitado enquanto houver vaga; quem decide de verdade é o servidor.
+  if (ctx.souDono) barra.append(botaoDeAcao("iniciar", "Iniciar partida", "botao botao-iniciar", comecarPartida, ctx.vagas === 0));
+  return barra;
+}
+
 function renderizarSala() {
   const raiz = el("section", "sala");
   raiz.setAttribute("aria-labelledby", "titulo-vista");
@@ -254,18 +394,29 @@ function renderizarSala() {
 
   if (!sala) {
     raiz.append(criarTituloVista("Sala"), el("p", "carregando", "Carregando sala…"));
-  } else {
-    // Versão provisória: a mesa vista de cima entra no próximo passo.
-    const assentos = el("ul", "assentos-provisorio");
-    for (const assento of sala.assentos) {
-      assentos.append(el("li", "", `Assento ${assento.assento}: ${ocupado(assento) ? assento.nome : "vago"}`));
-    }
-    raiz.append(
-      criarTituloVista(`Sala ${sala.formato}`),
-      assentos,
-      botaoDeAcao("sair", "Sair da sala", "botao", sairDaSalaAtual),
-    );
+    trocarConteudo(vista, raiz);
+    return;
   }
+
+  const ctx = derivarSala(sala);
+  const dono = sala.assentos.find((a) => a.usuario_id === sala.dono_id);
+  const topo = el("div", "sala-topo");
+  topo.append(
+    criarTituloVista(ctx.souDono ? `Sua sala ${sala.formato}` : `Sala ${sala.formato} de ${dono?.nome ?? "outro jogador"}`),
+    el("p", "dica", ctx.duplas ? "Parceiros sentam frente a frente." : "Um contra um."),
+  );
+
+  // A mesa vista de cima, como na mesa de jogo: você embaixo e os outros em volta.
+  const feltro = el("div", "feltro");
+  feltro.append(criarCentroSala(sala, ctx));
+  const ordem = (assento) => ORDEM_POSICOES.indexOf(ctx.posicaoDe(assento.assento));
+  for (const assento of [...sala.assentos].sort((a, b) => ordem(a) - ordem(b))) {
+    feltro.append(criarAssento(assento, sala, ctx));
+  }
+  const mesa = el("div", "mesa");
+  mesa.append(feltro);
+
+  raiz.append(topo, mesa, criarBarraSala(ctx));
   trocarConteudo(vista, raiz);
 }
 
@@ -277,6 +428,7 @@ async function carregarRanking() {
   try {
     estado.ranking = { situacao: "pronto", linhas: await obterRanking() };
   } catch (erro) {
+    if (sessaoEncerrada(erro)) return;
     estado.ranking = { situacao: "erro", mensagem: textoDoErro(erro) };
   }
   renderizarRanking();
@@ -395,18 +547,20 @@ function abrirSala(sala) {
   estado.salaId = sala.id;
   estado.salas = null;
   estado.sala = null;
+  estado.estavaNaSala = false;
   history.replaceState(null, "", `?sala=${encodeURIComponent(sala.id)}`);
   receberSala(sala);
   garantirFoco();
   agendarAtualizacao();
 }
 
-// Volta para a lista de salas, com um aviso opcional (sala encerrada, por exemplo).
+// Volta para a lista de salas, com um aviso opcional ("Você foi removido da sala.", por exemplo).
 function voltarParaLista(aviso) {
   versao++;
   estado.salaId = null;
   estado.sala = null;
   estado.salas = null;
+  estado.estavaNaSala = false;
   history.replaceState(null, "", location.pathname);
   if (aviso) mostrarAviso(aviso, "info");
   renderizar();
@@ -414,11 +568,23 @@ function voltarParaLista(aviso) {
   atualizarAgora();
 }
 
-// Sai do lobby para outra página. A atualização periódica para de vez.
-function irPara(endereco) {
+// A página vai ser trocada: a atualização periódica para de vez.
+function pararTudo() {
   saindo = true;
   clearTimeout(temporizador);
-  location.replace(endereco);
+}
+
+function irParaLogin() {
+  pararTudo();
+  location.replace(PAGINA_LOGIN);
+}
+
+// Vai para a mesa da partida. Antes, a URL do lobby perde a sala: assim, o botão Voltar do
+// navegador, na mesa, traz de volta à lista de salas, e não a esta sala, que já começou.
+function irParaMesa(partidaId) {
+  pararTudo();
+  history.replaceState(null, "", location.pathname);
+  location.assign(`${PAGINA_MESA}?partida=${encodeURIComponent(partidaId)}`);
 }
 
 // ---------- Dados recebidos ----------
@@ -428,8 +594,25 @@ function receberLista(salas) {
   renderizar();
 }
 
+// Aplica uma versão nova da sala, vinda da atualização periódica ou da resposta de uma ação.
 function receberSala(sala) {
+  const estou = sala.assentos.some((a) => a.usuario_id === usuario.id);
+  // A partida começou: quem está na sala vai para a mesa; quem só olhava volta para a lista.
+  if (sala.partida_id) {
+    if (estou) irParaMesa(sala.partida_id);
+    else voltarParaLista("A partida desta sala já começou.");
+    return;
+  }
+  if (sala.status !== "aguardando") {
+    voltarParaLista("A sala foi encerrada.");
+    return;
+  }
+  if (estado.estavaNaSala && !estou) {
+    voltarParaLista("Você foi removido da sala.");
+    return;
+  }
   estado.sala = sala;
+  estado.estavaNaSala = estou;
   renderizar();
 }
 
@@ -448,8 +631,10 @@ async function executar(chave, requisicao) {
   try {
     await requisicao();
   } catch (erro) {
-    mostrarAviso(textoDoErro(erro));
-    atualizarDeNovo = true;
+    if (!sessaoEncerrada(erro)) {
+      mostrarAviso(textoDoErro(erro));
+      atualizarDeNovo = true;
+    }
   } finally {
     estado.acao = null;
   }
@@ -469,6 +654,26 @@ async function entrarEAbrir(sala) {
   abrirSala(await entrarNaSala(sala.id, livre.assento));
 }
 
+// Senta no assento vago; para quem já está na sala, é uma troca de assento.
+async function sentar(numero) {
+  receberSala(await entrarNaSala(estado.salaId, numero));
+}
+
+async function colocarBot(numero) {
+  receberSala(await adicionarBot(estado.salaId, numero));
+}
+
+async function removerDoAssento(numero) {
+  receberSala(await liberarAssento(estado.salaId, numero));
+}
+
+// Só o dono vê o botão. Com o partida_id da resposta, vai direto para a mesa; os outros
+// jogadores vão quando a atualização periódica trouxer a sala com o partida_id.
+async function comecarPartida() {
+  const { partida_id: partidaId } = await iniciarPartida(estado.salaId);
+  irParaMesa(partidaId);
+}
+
 // Sai da sala e volta para a lista. Se o servidor responder que a sala não existe mais ou
 // que o usuário já não está nela, o resultado é o mesmo: volta para a lista.
 async function sairDaSalaAtual() {
@@ -480,10 +685,10 @@ async function sairDaSalaAtual() {
   voltarParaLista();
 }
 
-// Logout: sai da sala aberta (para não deixar um lugar ocupado à toa), apaga a sessão e volta
-// para a tela de login. Se a saída da sala falhar, o logout acontece do mesmo jeito.
+// Logout: sai da sala em que estiver sentado (para não deixar um lugar ocupado à toa), apaga
+// a sessão e volta para a tela de login. Se a saída da sala falhar, o logout acontece igual.
 async function sairDaConta() {
-  if (estado.salaId) {
+  if (estado.salaId && estado.estavaNaSala) {
     try {
       await sairDaSala(estado.salaId);
     } catch {
@@ -491,7 +696,7 @@ async function sairDaConta() {
     }
   }
   sair();
-  irPara(PAGINA_LOGIN);
+  irParaLogin();
 }
 
 // ---------- Atualização periódica ----------
@@ -543,7 +748,7 @@ async function buscarDados() {
       else receberLista(dados);
     }
   } catch (erro) {
-    if (versaoDoPedido === versao) {
+    if (!sessaoEncerrada(erro) && versaoDoPedido === versao) {
       if (salaId && erro instanceof ErroApi && erro.status === 404) {
         voltarParaLista(estado.sala ? "A sala foi encerrada." : erro.mensagem);
       } else {
@@ -564,7 +769,7 @@ function iniciar() {
   // é o do jogador. Melhor entrar de novo.
   if (!usuario?.id) {
     sair();
-    location.replace(PAGINA_LOGIN);
+    irParaLogin();
     return;
   }
 

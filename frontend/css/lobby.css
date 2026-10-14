@@ -347,14 +347,326 @@ body {
 /* ---------- Vista 2: sala de espera ---------- */
 
 .sala {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
   min-height: 100%;
-  padding: 18px 24px;
+  padding: 14px 16px 14px;
   background: radial-gradient(ellipse at 50% 35%, #272B32 0%, var(--fundo) 70%);
 }
 
-/* Provisório: lista simples de assentos, até a mesa vista de cima */
-.assentos-provisorio {
-  margin: 16px 0;
+.sala-topo {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 2px 8px 0;
+}
+
+.sala-topo .dica {
+  color: var(--texto-suave);
+  font-size: 14px;
+}
+
+/* Mesa vista de cima: a mesma moldura de madeira e o mesmo feltro da mesa de jogo (mesa.css) */
+.mesa {
+  display: flex;
+  flex: 1;
+  min-height: 400px;
+  padding: 16px;
+  border-radius: 40px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0) 30%, rgba(0, 0, 0, 0.28) 100%),
+    repeating-linear-gradient(92deg, rgba(0, 0, 0, 0.1) 0 2px, rgba(255, 255, 255, 0.03) 2px 5px, rgba(0, 0, 0, 0) 5px 11px),
+    linear-gradient(180deg, var(--madeira-clara), var(--madeira) 45%, var(--madeira-escura));
+  box-shadow:
+    0 0 0 1px #1D1108,
+    0 14px 34px rgba(0, 0, 0, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+.feltro {
+  position: relative;
+  flex: 1;
+  border-radius: 26px;
+  background: radial-gradient(ellipse at 50% 42%, var(--feltro-claro) 0%, var(--feltro) 48%, var(--feltro-escuro) 100%);
+  box-shadow:
+    inset 0 0 0 2px rgba(0, 0, 0, 0.5),
+    inset 0 0 0 3px rgba(217, 180, 91, 0.38),
+    inset 0 6px 28px rgba(0, 0, 0, 0.55),
+    inset 0 0 90px rgba(0, 0, 0, 0.35);
+}
+
+/* Textura do feltro (ruído gerado em SVG embutido) e linha de costura */
+.feltro::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 .55 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  opacity: 0.3;
+  outline: 1px dashed rgba(251, 248, 241, 0.13);
+  outline-offset: -13px;
+  pointer-events: none;
+}
+
+/* Centro: baralho esperando e lugares que faltam, sobre um oval claro como o da mesa */
+.centro-sala {
+  --l: 58px;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  transform: translate(-50%, -50%);
+  text-align: center;
+  white-space: nowrap;
+}
+
+.centro-sala::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: -1;
+  width: calc(var(--l) * 5);
+  height: calc(var(--l) * 3.6);
+  border: 1px solid rgba(251, 248, 241, 0.09);
+  border-radius: 50%;
+  background: radial-gradient(ellipse, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0) 70%);
+  transform: translate(-50%, -50%);
+}
+
+/* Três versos empilhados, um pouco desalinhados */
+.baralho {
+  position: relative;
+  width: var(--l);
+  height: calc(var(--l) * 1.4);
+  margin-bottom: 12px;
+}
+
+.baralho .carta {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: var(--l);
+  height: calc(var(--l) * 1.4);
+  max-width: none;
+  border-radius: calc(var(--l) * 0.052);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.4),
+    0 4px 10px rgba(0, 0, 0, 0.3);
+  user-select: none;
+}
+
+.baralho .carta:nth-child(1) {
+  transform: translate(-3px, 3px) rotate(-4deg);
+}
+
+.baralho .carta:nth-child(2) {
+  transform: translate(2px, 1px) rotate(3deg);
+}
+
+.ocupacao {
+  font-family: var(--fonte-titulo);
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.falta {
+  color: rgba(251, 248, 241, 0.75);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.falta.completa {
+  color: var(--dourado);
+}
+
+/* ---------- Assentos em volta da mesa ---------- */
+
+.assento {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.assento.pos-baixo {
+  bottom: 28px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.assento.pos-cima {
+  top: 28px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.assento.pos-esquerda {
+  top: 50%;
+  left: 32px;
+  transform: translateY(-50%);
+}
+
+.assento.pos-direita {
+  top: 50%;
+  right: 32px;
+  transform: translateY(-50%);
+}
+
+.rotulo-time {
+  color: var(--cor-time);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+/* Plaquinha do jogador: a mesma da mesa de jogo (mesa.css) */
+.plaquinha {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px 6px 11px;
+  border: 1px solid rgba(251, 248, 241, 0.16);
+  border-radius: 999px;
+  background: rgba(12, 22, 17, 0.74);
+  color: var(--texto);
+  font-size: 15px;
+  white-space: nowrap;
+}
+
+.cor-time {
+  flex: none;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--cor-time);
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.35);
+}
+
+.plaquinha .nome {
+  font-weight: 600;
+}
+
+.plaquinha .voce {
+  color: var(--texto-suave);
+  font-size: 12px;
+}
+
+.selo-bot {
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--creme);
+  color: var(--tinta);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.selo-dono {
+  color: var(--dourado);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+/* O próprio lugar, com borda dourada */
+.assento.meu .plaquinha {
+  border-color: var(--dourado);
+  background: rgba(40, 33, 12, 0.9);
+  box-shadow: 0 0 0 2px rgba(217, 180, 91, 0.3);
+}
+
+/* Lugar vago: contorno tracejado na cor do time; clicar senta (ou troca de lugar) */
+.vaga {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px 6px 11px;
+  border: 1px dashed var(--cor-time);
+  border-radius: 999px;
+  background: rgba(12, 22, 17, 0.4);
+  color: var(--texto);
+  font-size: 15px;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: background-color 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
+}
+
+.vaga .cor-time {
+  border: 2px solid var(--cor-time);
+  background: transparent;
+  box-shadow: none;
+}
+
+.vaga:not(:disabled):hover {
+  border-style: solid;
+  background: rgba(12, 22, 17, 0.8);
+}
+
+.vaga:disabled {
+  opacity: 0.55;
+}
+
+.vaga:focus-visible {
+  outline: 2px solid var(--dourado);
+  outline-offset: 2px;
+}
+
+.botao-remover {
+  border-color: var(--vermelho-acao);
+  background: rgba(12, 22, 17, 0.6);
+  color: #F0907C;
+}
+
+/* ---------- Barra abaixo da mesa ---------- */
+
+/* Três colunas: sair à esquerda, situação no meio e iniciar à direita */
+.barra-sala {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 14px;
+  border: 1px solid var(--painel-borda);
+  border-radius: 14px;
+  background: var(--painel);
+}
+
+.barra-sala > .botao:first-child {
+  justify-self: start;
+}
+
+.barra-sala .situacao {
+  color: var(--texto-suave);
+  text-align: center;
+}
+
+/* Na sala, o aviso aparece sobre a barra: enquanto ele estiver na tela, o texto da situação
+   some, para os dois não se misturarem */
+.principal:has(.aviso-caixa) .barra-sala .situacao {
+  visibility: hidden;
+}
+
+.botao-iniciar {
+  justify-self: end;
+  min-width: 160px;
+  border-color: var(--dourado-escuro);
+  background: var(--dourado);
+  color: var(--tinta);
+  font-family: var(--fonte-titulo);
+  font-size: 16px;
+  font-weight: 700;
 }
 
 /* ---------- Ranking ---------- */
@@ -472,14 +784,15 @@ body {
 
 /* ---------- Aviso ---------- */
 
-/* Fica sobre o pé da área principal, centralizado, sem empurrar o conteúdo */
+/* Fica sobre o pé da área principal, centralizado, sem empurrar o conteúdo. Na sala, isso
+   coincide com o meio da barra abaixo da mesa. */
 .aviso {
   position: absolute;
   bottom: 22px;
   left: 50%;
   z-index: 5;
   width: max-content;
-  max-width: min(560px, calc(100% - 48px));
+  max-width: min(520px, calc(100% - 48px));
   transform: translateX(-50%);
 }
 
