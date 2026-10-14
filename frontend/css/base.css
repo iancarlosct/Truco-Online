@@ -97,6 +97,40 @@ button:disabled {
   cursor: default;
 }
 
+/* O atributo hidden tem que vencer os "display" definidos nas folhas de cada tela */
+[hidden] {
+  display: none !important;
+}
+
 /* Cor do time: use junto com var(--cor-time) no elemento */
 .time-a { --cor-time: var(--time-a); }
 .time-b { --cor-time: var(--time-b); }
+
+/* ---------- Componentes comuns ---------- */
+
+/* Botão principal, escuro como a tinta das cartas: feito para ficar sobre o creme */
+.botao-principal {
+  padding: 10px 16px;
+  border: 1px solid var(--tinta);
+  border-radius: var(--raio);
+  background: var(--tinta);
+  color: var(--creme);
+  font-family: var(--fonte-titulo);
+  font-size: 17px;
+  font-weight: 700;
+  transition: filter 0.15s ease, opacity 0.15s ease;
+}
+
+.botao-principal:not(:disabled):hover {
+  filter: brightness(1.5);
+}
+
+.botao-principal:disabled {
+  opacity: 0.6;
+}
+
+/* Sobre o creme o contorno de foco usa o dourado escuro, que contrasta mais */
+.botao-principal:focus-visible {
+  outline: 2px solid var(--dourado-escuro);
+  outline-offset: 2px;
+}

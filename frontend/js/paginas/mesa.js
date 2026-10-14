@@ -3,6 +3,7 @@
 // Nenhuma regra do jogo é implementada aqui: a interface só habilita ou desabilita controles
 // conforme o estado recebido; quem valida as ações é o servidor.
 
+import { exigirLogin } from "../auth.js";
 import { criarCarta, criarVerso, proximaManilha } from "../cartas.js";
 import * as mocks from "../mock/estados.js";
 
@@ -392,4 +393,5 @@ function montarSeletorMock() {
   renderizarMesa(mocks[inicial]);
 }
 
-montarSeletorMock();
+// A mesa exige login: sem sessão, exigirLogin() manda para a tela de login e a mesa não é montada.
+if (exigirLogin()) montarSeletorMock();

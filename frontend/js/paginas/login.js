@@ -15,6 +15,10 @@ const SENHA_MIN = 6;
 // Formato básico de e-mail: algo@algo.algo, sem espaços.
 const FORMATO_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+// Aviso para quem chega com "?sessao=expirada": é para onde o api.js manda quem teve a sessão
+// recusada pelo servidor (resposta 401).
+const AVISO_SESSAO_EXPIRADA = "Sua sessão expirou. Entre novamente.";
+
 // Texto do botão de cada formulário: parado e enquanto a requisição está em andamento.
 const TEXTO_BOTAO = {
   entrar: { parado: "Entrar", enviando: "Entrando…" },
@@ -125,10 +129,20 @@ function validar(formulario, regras, valores) {
 
 // ---------- Abas e mensagem do cartão ----------
 
-// Mensagem geral do cartão, usada para os erros vindos da API. Com texto vazio, esconde.
-function mostrarMensagem(texto) {
+// Mensagem geral do cartão, usada para os erros vindos da API e, com o tipo "info", para o
+// aviso de sessão expirada, num tom mais discreto. Com texto vazio, esconde.
+function mostrarMensagem(texto, tipo = "erro") {
   mensagem.textContent = texto;
   mensagem.hidden = !texto;
+  mensagem.classList.toggle("info", tipo === "info");
+}
+
+// Quem chega depois de um 401 vê o aviso de sessão expirada. O parâmetro sai da URL logo em
+// seguida, para o aviso não voltar num F5. Num acesso normal, não aparece nada.
+function avisarSessaoExpirada() {
+  if (new URLSearchParams(location.search).get("sessao") !== "expirada") return;
+  mostrarMensagem(AVISO_SESSAO_EXPIRADA, "info");
+  history.replaceState(null, "", location.pathname);
 }
 
 // Mostra a aba pedida ("entrar" ou "cadastro") e esconde a outra.
@@ -244,6 +258,7 @@ function iniciar() {
     abas[outra].botao.focus();
   });
 
+  avisarSessaoExpirada();
   conjunto.hidden = false;
   abas.entrar.formulario.elements.email.focus();
 }
