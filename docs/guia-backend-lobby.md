@@ -53,14 +53,14 @@ Não há WebSocket no lobby. A tela pergunta ao servidor a cada 3 segundos (poll
 
 - Na lista, pede `GET /api/lobby/salas`. Na sala, `GET /api/lobby/salas/{id}`.
 - O próximo pedido só sai quando o anterior termina. A tela espera cada resposta por até 10 segundos.
-- Com a aba do navegador oculta (outra aba na frente, janela minimizada), os pedidos param. Quando a aba volta, sai um pedido na hora.
+- Com a aba do navegador oculta (outra aba na frente, janela minimizada), os pedidos da lista param. Os da sala de espera continuam, para o jogador não perder o assento (seção 6.5). Quando a aba volta, sai um pedido na hora.
 - Um erro não para a atualização: vira aviso, e a próxima tentativa sai no horário.
 - O ranking é pedido uma vez só, ao abrir a página.
 
 O que isso significa para o servidor:
 
 - Cada aba aberta faz uns 20 pedidos por minuto. As rotas de leitura precisam ser leves.
-- O `GET /api/lobby/salas/{id}` de quem está sentado vale como sinal de presença (seção 6.5). Com a aba oculta por mais de 15 segundos, o jogador sai da sala (P10).
+- O `GET /api/lobby/salas/{id}` de quem está sentado vale como sinal de presença (seção 6.5). Quem passa 60 segundos sem pedir a sala sai dela.
 - Uma mudança feita por outro jogador aparece na tela em até 3 segundos.
 
 ### 1.3 Ações e respostas
@@ -102,7 +102,7 @@ O mock segue as rotas e os códigos de erro deste guia. Em quatro pontos ele ain
 | Ponto | Mock | Regra (este guia) |
 |---|---|---|
 | Dono sai | A sala some, e o `GET` dela passa a responder 404 | A sala fica com `status: "encerrada"` (seção 6.4) |
-| Presença | Não existe | 15 segundos sem `GET` tiram o jogador (seção 6.5) |
+| Presença | Não existe | 60 segundos sem `GET` tiram o jogador (seção 6.5) |
 | Ranking | Sempre 10 linhas, com o usuário logado, sem empates | 10 primeiros, mais a linha do usuário se ele estiver abaixo; empate divide a posição (seção 6.7) |
 | Token | Responde `token_expirado` também quando falta o token | `token_invalido` ou `token_expirado` (seção 5.2) |
 
@@ -129,7 +129,7 @@ Com isso a lista, a criação e a sala de espera já funcionam com a tela (seç�
 
 **Etapa 3: presença**
 
-- [ ] Hora do último `GET` de cada jogador sentado. Depois de 15 segundos sem ele, o jogador sai da sala, e o dono ausente encerra a sala (seção 6.5).
+- [ ] Hora do último `GET` de cada jogador sentado. Depois de 60 segundos sem ele, o jogador sai da sala, e o dono ausente encerra a sala (seção 6.5).
 
 **Etapa 4: início da partida**
 
@@ -642,7 +642,9 @@ A ordem das conferências em cada rota (seção 3) é a mesma do mock. Ela impor
 
 ### 6.5 Presença
 
-Regra do grupo: **se o servidor ficar 15 segundos sem receber `GET /api/lobby/salas/{id}` de um jogador sentado numa sala com status `"aguardando"`, ele remove esse jogador. Se for o dono, a sala é encerrada.**
+Regra do grupo: **se o servidor ficar 60 segundos sem receber `GET /api/lobby/salas/{id}` de um jogador sentado numa sala com status `"aguardando"`, ele remove esse jogador. Se for o dono, a sala é encerrada.**
+
+O prazo é bem maior que os 3 segundos entre os pedidos porque os navegadores reduzem a frequência dos timers (`setTimeout`) em abas ocultas: com a aba em segundo plano, o pedido seguinte pode sair muito depois dos 3 segundos. Com 60 segundos, quem só trocou de aba não perde o assento.
 
 Como aplicar:
 
@@ -655,8 +657,8 @@ Como aplicar:
 Com a tela de hoje:
 
 - Quem está na sala de espera pede a sala a cada 3 segundos e fica bem dentro do prazo.
-- Com a aba oculta, a tela para de pedir. Depois de 15 segundos, o jogador sai da sala, e o dono encerra a sala. Quando a aba volta, a tela mostra "Você foi removido da sala." ou "A sala foi encerrada." (P10).
-- Quem está sentado numa sala, mas com a lista aberta no lugar da sala, também sai depois de 15 segundos: o `GET` da lista não renova a presença.
+- Com a aba oculta, a sala de espera continua pedindo a sala, no ritmo que o navegador permitir. Se mesmo assim passar do prazo, o jogador sai da sala, e o dono encerra a sala. Quando a aba volta, a tela mostra "Você foi removido da sala." ou "A sala foi encerrada.".
+- Quem está sentado numa sala, mas com a lista aberta no lugar da sala, sai depois de 60 segundos: o `GET` da lista não renova a presença.
 - Fechar a aba ou perder a conexão tem o mesmo efeito, e é para isso que a regra existe.
 
 ### 6.6 Início da partida: o Game e o `bot.solicitado`
@@ -789,17 +791,17 @@ WHERE sala_id = $1 AND assento = $2;
 -- GET da sala por quem está sentado nela: renova a presença
 UPDATE assentos SET visto_em = now() WHERE sala_id = $1 AND usuario_id = $2;
 
--- Jogadores ausentes há mais de 15 segundos. Para cada um, faça o mesmo que o /sair.
+-- Jogadores ausentes há mais de 60 segundos. Para cada um, faça o mesmo que o /sair.
 SELECT a.sala_id, a.assento, a.usuario_id, s.dono_id
 FROM assentos a JOIN salas s ON s.id = a.sala_id
 WHERE s.status = 'aguardando'
   AND a.usuario_id IS NOT NULL
-  AND a.visto_em < now() - interval '15 seconds';
+  AND a.visto_em < now() - interval '60 seconds';
 ```
 
 - Nunca monte o SQL juntando textos com dados do usuário. Use sempre os parâmetros da biblioteca (`$1`, `%s`, `:id`, conforme a biblioteca).
 - Confirme a transação (commit) antes de responder. O próximo `GET` da tela chega em até 3 segundos e precisa enxergar a mudança.
-- O `now()` do Postgres é a hora do começo da transação. Para comparar com 15 segundos, isso basta.
+- O `now()` do Postgres é a hora do começo da transação. Para comparar com 60 segundos, isso basta.
 
 ### 7.3 Tabelas e consultas do Ranking
 
@@ -915,7 +917,7 @@ GAME_URL = os.environ.get("GAME_URL", "")  # no Docker Compose, algo como http:/
 REDIS_URL = os.environ.get("REDIS_URL", "")  # no Docker Compose, algo como redis://redis:6379
 
 ASSENTOS_POR_FORMATO = {"1x1": 2, "2x2": 4}
-PRAZO_PRESENCA = 15  # segundos sem GET /salas/{id} até o jogador ser tirado da sala
+PRAZO_PRESENCA = 60  # segundos sem GET /salas/{id} até o jogador ser tirado da sala
 
 # Erros: código -> (status HTTP, mensagem). Os mesmos do mock da tela, mais os de token do
 # guia do login e o "game_indisponivel", que é proposta deste guia (P1).
@@ -1054,7 +1056,7 @@ def tirar_da_sala(sala: dict, assento: dict) -> None:
 
 
 def tirar_ausentes() -> None:
-    """Regra de presença: quem está sentado numa sala "aguardando" e passou 15 segundos sem
+    """Regra de presença: quem está sentado numa sala "aguardando" e passou 60 segundos sem
     pedir GET /salas/{id} sai da sala (se for o dono, a sala é encerrada). Bots não contam.
     Roda no começo de toda requisição, antes de qualquer outra regra."""
     agora = time.monotonic()
@@ -1174,7 +1176,7 @@ def obter_sala(sala_id: str, usuario: dict = Depends(usuario_logado)):
         sala = SALAS.get(sala_id)  # aqui uma sala encerrada também responde
         if sala is None:
             raise ErroLobby("sala_nao_encontrada")
-        # Quem está sentado e pede a sala está presente: o prazo de 15 segundos recomeça.
+        # Quem está sentado e pede a sala está presente: o prazo de 60 segundos recomeça.
         meu_assento = assento_do_usuario(sala, usuario["id"])
         if meu_assento and sala["status"] == "aguardando":
             meu_assento["visto_em"] = time.monotonic()
@@ -1660,7 +1662,7 @@ Abrir a tela por `python -m http.server`, como no desenvolvimento do frontend, n
 | O dono vai para `mesa.html?partida=undefined` | A resposta do `/iniciar` não tem `partida_id`. |
 | Só o dono vai para a mesa; os outros ficam esperando | O `GET` da sala não traz o `partida_id` depois do início. |
 | Todo mundo sai da sala depois de uns segundos | A presença não é renovada no `GET` da sala, ou o prazo é contado de antes de o jogador sentar (seção 6.5). |
-| O jogador sai da sala ao trocar de aba | Esperado: com a aba oculta, a tela para de pedir a sala (P10). |
+| O jogador sai da sala ao trocar de aba | Prazo de presença menor que 60 segundos (seção 6.5), ou o navegador usou um `lobby.js` antigo: recarregue com Ctrl+Shift+R. |
 | O ranking mostra "undefinedº" ou "undefined" | Falta `posicao`, `vitorias` ou `partidas` na linha (seção 4.4). |
 | Uma partida contou duas vezes no ranking | O evento chegou repetido, e o Ranking não guardou o `partida_id` (seção 6.7). |
 | A tela mostra "Sala não encontrada" só pelo gateway | Caminho do Nginx diferente do declarado no serviço (seção 3.1). |
@@ -1677,11 +1679,11 @@ Abrir a tela por `python -m http.server`, como no desenvolvimento do frontend, n
 - **P6. Status de sucesso.** Este guia usa 201 no `POST /api/lobby/salas` e 200 nas demais rotas. A tela aceita qualquer status de 200 a 299.
 - **P7. Nível do bot.** O exemplo só aceita `"padrao"` e responde 422 para outro valor. O mock aceita qualquer valor. Decidir se haverá outros níveis.
 - **P8. Ações em sala encerrada.** Pela decisão do grupo, a sala encerrada continua existindo, com `"status": "encerrada"`. Este guia faz o `GET` dela responder 200 e as ações responderem 404 `sala_nao_encontrada`, que é o que o mock responde hoje para uma sala que deixou de existir. Confirmar; a alternativa seria 409 com outro código.
-- **P9. Começo do prazo de presença.** A regra fala em 15 segundos sem `GET`. Este guia conta o prazo a partir do momento em que o jogador senta (criar, entrar, trocar de assento). Confirmar.
+- **P9. Começo do prazo de presença.** A regra fala em 60 segundos sem `GET`. Este guia conta o prazo a partir do momento em que o jogador senta (criar, entrar, trocar de assento). Confirmar.
 
 ### Consequências das regras para a tela
 
-- **P10. Aba oculta tira o jogador da sala.** A tela para de atualizar com a aba oculta, como foi pedido para ela, e a presença tira o jogador depois de 15 segundos sem `GET`. Quem troca de aba por mais de 15 segundos perde o lugar, e o dono que faz isso encerra a sala. Decidir se é isso mesmo. Se não for, uma saída é a tela continuar pedindo a sala, mais devagar, com a aba oculta; outra é aumentar o prazo.
+- **P10. Aba oculta tira o jogador da sala. Resolvido.** A sala de espera continua pedindo a sala com a aba oculta, e o prazo de presença passou de 15 para 60 segundos, para cobrir a redução dos timers em abas ocultas (seção 6.5). Só a lista para de atualizar com a aba oculta.
 - **P11. Empate na 10ª posição.** "Os 10 primeiros" são 10 linhas. Se a 10ª e a 11ª linhas empatam, a 11ª fica de fora, mesmo tendo a mesma posição da 10ª. Mandar mais de 10 linhas não adianta: a tela mostra só as 10 primeiras e, depois delas, só a do usuário logado. Decidir se isso basta.
 - **P12. A sala depois da partida.** O documento diz que o Lobby recebe `partida.criada` e `partida.finalizada`, mas não diz para quê. O `partida.criada` repete o que o Lobby já sabe pela resposta do `POST /interno/partidas`. Para o `partida.finalizada`, falta decidir se a sala muda de status (não há status para isso no contrato). Enquanto a sala tiver `partida_id`, quem estava nela e abrir o link volta para a mesa daquela partida.
 

@@ -701,13 +701,19 @@ async function sairDaConta() {
 
 // ---------- Atualização periódica ----------
 
+// Com a aba oculta, a lista de salas para de atualizar. A sala de espera não para: é o GET
+// da sala que mantém o jogador no assento (o servidor tira quem some por um tempo).
+function pausadaPelaAba() {
+  return document.hidden && !estado.salaId;
+}
+
 // Pede agora os dados da vista atual. Se já houver um pedido ou uma ação em andamento, a
-// atualização é feita logo depois que eles terminarem. Com a aba oculta, não faz nada: a
-// atualização volta quando a aba aparece.
+// atualização é feita logo depois que eles terminarem. Na lista com a aba oculta, não faz
+// nada: a atualização volta quando a aba aparece.
 function atualizarAgora() {
   clearTimeout(temporizador);
   temporizador = null;
-  if (saindo || document.hidden) return;
+  if (saindo || pausadaPelaAba()) return;
   if (atualizando || estado.acao) {
     atualizarDeNovo = true;
     return;
@@ -719,7 +725,7 @@ function atualizarAgora() {
 function agendarAtualizacao() {
   clearTimeout(temporizador);
   temporizador = null;
-  if (saindo || document.hidden || atualizando || estado.acao) return;
+  if (saindo || pausadaPelaAba() || atualizando || estado.acao) return;
   temporizador = setTimeout(atualizarAgora, INTERVALO_ATUALIZACAO_MS);
 }
 
@@ -780,13 +786,14 @@ function iniciar() {
   carregarRanking();
   atualizarAgora();
 
-  // Aba oculta: para de atualizar. Ao voltar, atualiza na hora e retoma o ritmo.
+  // Aba oculta: a lista para de atualizar; a sala de espera continua. Ao voltar, atualiza na
+  // hora e retoma o ritmo.
   document.addEventListener("visibilitychange", () => {
-    if (document.hidden) {
+    if (!document.hidden) {
+      atualizarAgora();
+    } else if (pausadaPelaAba()) {
       clearTimeout(temporizador);
       temporizador = null;
-    } else {
-      atualizarAgora();
     }
   });
 
