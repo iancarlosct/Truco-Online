@@ -12,11 +12,6 @@
   --carta-l: 96px;
 }
 
-/* O atributo hidden tem que vencer os "display" definidos mais abaixo */
-[hidden] {
-  display: none !important;
-}
-
 /* ---------- Fundo: feltro ---------- */
 
 /* Mesmo degradê e mesma textura (ruído gerado em SVG embutido) do feltro da mesa */
@@ -226,31 +221,14 @@ body::before {
   font-size: 12.5px;
 }
 
-.botao-principal {
+/* O botão em si (.botao-principal) está em base.css */
+.formulario .botao-principal {
   margin-top: 6px;
-  padding: 10px 16px;
-  border: 1px solid var(--tinta);
-  border-radius: var(--raio);
-  background: var(--tinta);
-  color: var(--creme);
-  font-family: var(--fonte-titulo);
-  font-size: 17px;
-  font-weight: 700;
-  transition: filter 0.15s ease, opacity 0.15s ease;
-}
-
-.botao-principal:not(:disabled):hover {
-  filter: brightness(1.5);
-}
-
-.botao-principal:disabled {
-  opacity: 0.6;
 }
 
 /* Sobre o creme o contorno de foco usa o dourado escuro, que contrasta mais */
 .aba:focus-visible,
-.campo input:focus-visible,
-.botao-principal:focus-visible {
+.campo input:focus-visible {
   outline: 2px solid var(--dourado-escuro);
   outline-offset: 2px;
 }

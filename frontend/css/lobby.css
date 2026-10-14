@@ -1,0 +1,525 @@
+/* Tela do lobby: lista de salas, sala de espera e ranking.
+   Somente desktop (largura mínima de 1200px), como a mesa. */
+
+:root {
+  --largura-ranking: 300px;
+}
+
+html {
+  overflow: auto;
+}
+
+body {
+  min-width: 1200px;
+}
+
+/* ---------- Estrutura geral ---------- */
+
+.tela {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--largura-ranking);
+  grid-template-rows: auto minmax(0, 1fr);
+  height: 100vh;
+  min-height: 680px;
+}
+
+/* ---------- Cabeçalho ---------- */
+
+.cabecalho {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 20px;
+  border-bottom: 1px solid var(--painel-borda);
+  background: var(--painel);
+}
+
+.marca {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.titulo {
+  font-family: var(--fonte-titulo);
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+/* Como no login: letras espaçadas, com um filete dourado antes */
+.subtitulo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--texto-suave);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.subtitulo::before {
+  content: "";
+  width: 24px;
+  height: 1px;
+  background: rgba(217, 180, 91, 0.6);
+}
+
+.usuario {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.usuario-nome {
+  font-weight: 600;
+}
+
+/* ---------- Botões ---------- */
+
+/* Botão da interface escura: o mesmo visual do .botao da mesa (mesa.css) */
+.botao {
+  min-width: 84px;
+  padding: 7px 14px;
+  border: 1px solid var(--painel-borda);
+  border-radius: var(--raio);
+  background: var(--painel-claro);
+  color: var(--texto);
+  font-weight: 600;
+  transition: background-color 0.15s ease, border-color 0.15s ease, filter 0.15s ease, opacity 0.15s ease;
+}
+
+.botao:not(:disabled):hover {
+  filter: brightness(1.15);
+}
+
+.botao:disabled {
+  opacity: 0.38;
+}
+
+.botao-pequeno {
+  min-width: 0;
+  padding: 4px 10px;
+  font-size: 13px;
+}
+
+/* Botão creme, como uma carta, para ficar sobre o feltro */
+.botao-creme {
+  padding: 8px 16px;
+  border: 1px solid var(--borda-carta);
+  border-radius: var(--raio);
+  background: var(--creme);
+  color: var(--tinta);
+  font-family: var(--fonte-titulo);
+  font-size: 16px;
+  font-weight: 700;
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.35),
+    0 4px 10px rgba(0, 0, 0, 0.25);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+}
+
+.botao-creme:not(:disabled):hover {
+  transform: translateY(-2px);
+  box-shadow:
+    0 2px 4px rgba(0, 0, 0, 0.35),
+    0 8px 16px rgba(0, 0, 0, 0.3);
+}
+
+.botao-creme:disabled {
+  opacity: 0.6;
+}
+
+/* Na interface escura e sobre o feltro o contorno de foco é dourado.
+   Sobre o creme vale o dourado escuro do .botao-principal (base.css). */
+.botao:focus-visible,
+.botao-creme:focus-visible,
+.aviso-fechar:focus-visible {
+  outline: 2px solid var(--dourado);
+  outline-offset: 2px;
+}
+
+/* O título da vista recebe o foco por código, só para marcar o começo da vista */
+.titulo-vista:focus {
+  outline: none;
+}
+
+/* ---------- Área principal ---------- */
+
+.principal {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* A vista rola por dentro; o aviso fica parado no pé da área */
+.vista {
+  height: 100%;
+  overflow-y: auto;
+}
+
+.titulo-vista {
+  font-family: var(--fonte-titulo);
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.carregando {
+  color: var(--texto-suave);
+}
+
+/* ---------- Vista 1: lista de salas ---------- */
+
+/* O mesmo feltro do login (degradê + textura de ruído em SVG embutido), com a linha de costura */
+.lista {
+  min-height: 100%;
+  padding: 28px 34px 40px;
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 .17 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"),
+    radial-gradient(ellipse at 50% 30%, var(--feltro-claro) 0%, var(--feltro) 50%, var(--feltro-escuro) 100%);
+  outline: 1px dashed rgba(251, 248, 241, 0.13);
+  outline-offset: -12px;
+}
+
+.lista-topo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.criar-sala {
+  display: flex;
+  gap: 10px;
+}
+
+.lista .carregando {
+  color: rgba(251, 248, 241, 0.75);
+}
+
+/* Cartões das salas, como cartas sobre o feltro */
+.salas {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 18px;
+}
+
+.cartao-sala {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px 18px 16px;
+  border: 1px solid var(--borda-carta);
+  border-radius: 14px;
+  background: var(--creme);
+  color: var(--tinta);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.4),
+    0 10px 24px rgba(0, 0, 0, 0.35);
+}
+
+/* Filete dourado por dentro da borda, como no cartão do login */
+.cartao-sala::before {
+  content: "";
+  position: absolute;
+  inset: 6px;
+  border: 1px solid rgba(168, 134, 47, 0.45);
+  border-radius: 9px;
+  pointer-events: none;
+}
+
+.cartao-sala-topo {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.formato {
+  font-family: var(--fonte-titulo);
+  font-size: 34px;
+  font-weight: 700;
+  line-height: 1.05;
+}
+
+.modalidade {
+  color: var(--tinta-suave);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.lugares {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 600;
+}
+
+.pontos {
+  display: flex;
+  gap: 5px;
+}
+
+/* Um ponto por assento: vago tem só o contorno na cor do time; ocupado é preenchido */
+.ponto {
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--cor-time);
+  border-radius: 50%;
+}
+
+.ponto.ocupado {
+  background: var(--cor-time);
+}
+
+.dono {
+  overflow: hidden;
+  color: var(--tinta-suave);
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* O botão fica no pé do cartão, alinhado entre cartões de alturas diferentes */
+.cartao-sala .botao-principal {
+  margin-top: auto;
+}
+
+/* Lista vazia: cartas viradas em leque e um convite */
+.lista-vazia {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  max-width: 440px;
+  margin: 72px auto 0;
+  text-align: center;
+}
+
+.cartas-viradas {
+  --l: 72px;
+  display: flex;
+  justify-content: center;
+  margin-bottom: 22px;
+}
+
+.cartas-viradas .carta {
+  width: var(--l);
+  height: calc(var(--l) * 1.4);
+  max-width: none;
+  border-radius: calc(var(--l) * 0.052);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.4),
+    0 4px 10px rgba(0, 0, 0, 0.3);
+  user-select: none;
+}
+
+.cartas-viradas .carta:nth-child(1) {
+  transform: translate(22px, 8px) rotate(-14deg);
+}
+
+.cartas-viradas .carta:nth-child(2) {
+  position: relative;
+  z-index: 1;
+}
+
+.cartas-viradas .carta:nth-child(3) {
+  transform: translate(-22px, 8px) rotate(14deg);
+}
+
+.lista-vazia-titulo {
+  font-family: var(--fonte-titulo);
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.lista-vazia-texto {
+  color: rgba(251, 248, 241, 0.78);
+}
+
+/* ---------- Vista 2: sala de espera ---------- */
+
+.sala {
+  min-height: 100%;
+  padding: 18px 24px;
+  background: radial-gradient(ellipse at 50% 35%, #272B32 0%, var(--fundo) 70%);
+}
+
+/* Provisório: lista simples de assentos, até a mesa vista de cima */
+.assentos-provisorio {
+  margin: 16px 0;
+}
+
+/* ---------- Ranking ---------- */
+
+.ranking {
+  min-height: 0;
+  overflow-y: auto;
+  border-left: 1px solid var(--painel-borda);
+  background: var(--painel);
+}
+
+.ranking-titulo {
+  padding: 14px 16px 0;
+  font-family: var(--fonte-titulo);
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.ranking-subtitulo {
+  padding: 0 16px 12px;
+  border-bottom: 1px solid var(--painel-borda);
+  color: var(--texto-suave);
+  font-size: 12px;
+}
+
+.ranking-situacao {
+  padding: 14px 16px 10px;
+  color: var(--texto-suave);
+  font-size: 13px;
+}
+
+.ranking > .botao-pequeno {
+  margin: 0 16px;
+}
+
+.ranking-tabela {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 14px;
+}
+
+.ranking-tabela th {
+  padding: 12px 6px 6px;
+  color: var(--texto-suave);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-align: left;
+  text-transform: uppercase;
+}
+
+.ranking-tabela td {
+  padding: 8px 6px;
+  border-top: 1px solid var(--painel-borda);
+}
+
+.ranking-tabela .posicao {
+  width: 46px;
+  padding-left: 16px;
+}
+
+.ranking-tabela td.posicao {
+  color: var(--texto-suave);
+  font-family: var(--fonte-titulo);
+  font-weight: 700;
+}
+
+/* Os três primeiros com a posição em dourado */
+.ranking-tabela tbody tr:nth-child(-n + 3) td.posicao {
+  color: var(--dourado);
+}
+
+.ranking-tabela .nome {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ranking-tabela .voce {
+  margin-left: 6px;
+  color: var(--texto-suave);
+  font-size: 12px;
+}
+
+.ranking-tabela .numero {
+  width: 66px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.ranking-tabela .numero:last-child {
+  width: 78px;
+  padding-right: 16px;
+}
+
+/* Linha do usuário logado */
+.ranking-tabela tr.eu td {
+  background: rgba(217, 180, 91, 0.12);
+}
+
+.ranking-tabela tr.eu td.posicao {
+  box-shadow: inset 3px 0 0 var(--dourado);
+}
+
+.ranking-tabela tr.eu .nome-jogador {
+  font-weight: 700;
+}
+
+.ranking-tabela .separador td {
+  padding: 2px 6px;
+  color: var(--texto-suave);
+  text-align: center;
+}
+
+/* ---------- Aviso ---------- */
+
+/* Fica sobre o pé da área principal, centralizado, sem empurrar o conteúdo */
+.aviso {
+  position: absolute;
+  bottom: 22px;
+  left: 50%;
+  z-index: 5;
+  width: max-content;
+  max-width: min(560px, calc(100% - 48px));
+  transform: translateX(-50%);
+}
+
+.aviso-caixa {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 8px 10px 14px;
+  border: 1px solid var(--painel-borda);
+  border-left: 4px solid var(--vermelho-acao);
+  border-radius: var(--raio);
+  background: rgba(23, 25, 29, 0.95);
+  color: var(--texto);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  font-size: 14px;
+}
+
+.aviso-caixa.info {
+  border-left-color: var(--dourado);
+}
+
+.aviso-texto {
+  padding-top: 1px;
+}
+
+.aviso-fechar {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--texto-suave);
+  font-size: 18px;
+  line-height: 1;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.aviso-fechar:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--texto);
+}

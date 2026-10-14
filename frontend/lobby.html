@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=1200">
+  <title>Truco Online — Lobby</title>
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/lobby.css">
+</head>
+<body>
+  <!-- Começa escondida: lobby.js só mostra a tela depois de conferir que há sessão -->
+  <div class="tela" id="tela" hidden>
+    <header class="cabecalho">
+      <div class="marca">
+        <h1 class="titulo">Truco Online</h1>
+        <p class="subtitulo">Truco paulista</p>
+      </div>
+      <!-- Nome do usuário e botão Sair, desenhados por lobby.js -->
+      <div class="usuario" id="usuario"></div>
+    </header>
+
+    <main class="principal">
+      <!-- A vista atual (lista de salas ou sala de espera) é desenhada aqui por lobby.js -->
+      <div class="vista" id="vista"></div>
+      <!-- Aviso discreto: erros da API e recados como "A sala foi encerrada." -->
+      <div class="aviso" id="aviso" role="status" aria-live="polite"></div>
+    </main>
+
+    <aside class="ranking" id="ranking" aria-labelledby="ranking-titulo"></aside>
+  </div>
+  <script type="module" src="js/paginas/lobby.js"></script>
+</body>
+</html>
