@@ -4,13 +4,13 @@ Este guia é para quem vai implementar o serviço Auth em Python com FastAPI e P
 
 **De onde vêm as informações**
 
-- **Código da tela**: `frontend/index.html`, `frontend/js/api.js`, `frontend/js/auth.js` e `frontend/js/paginas/login.js`, na branch `feature/frontend-login` em 13/10/2026. Tudo o que o guia afirma que a tela envia, lê ou mostra saiu desse código e foi conferido rodando a tela no navegador: com o mock e, com ele desligado, falando com o exemplo da seção 8.
+- **Código da tela**: `frontend/index.html`, `frontend/js/api.js`, `frontend/js/auth.js` e `frontend/js/paginas/login.js`, na branch `feature/frontend-login` em 13/10/2026. Tudo o que o guia afirma que a tela envia, lê ou mostra saiu desse código e foi conferido rodando a tela no navegador: com o mock e, com ele desligado, falando com o exemplo da seção 8. Atualizado em 14/10/2026, depois do lobby (branch `feature/frontend-lobby`): `lobby.html` passou a existir, o tratamento de 401 entrou em `api.js` e cada serviço ganhou a sua chave de mock.
 - **Mock dentro de `api.js`**: enquanto o Auth não existe, é ele que responde ao cadastro e ao login. O comportamento dele é o contrato que a tela assume hoje.
 - **Documento de requisitos e contratos** (link no [README](../README.md)): usado para o que o código não cobre, como a rota `GET /api/auth/me` e o uso do token pelos outros serviços.
 
 Quando essas fontes não batem, ou quando o código depende de algo que não está escrito em lugar nenhum, o texto traz um código como **P3**. Ele aponta para o item correspondente da seção 10, Pontos em aberto.
 
-**Importante:** hoje a tela não faz nenhuma requisição. No topo de `frontend/js/api.js` há a constante `USAR_MOCK`, que está em `true`: com ela o cadastro e o login são simulados dentro do navegador. Com `false`, as mesmas funções passam a chamar o serviço, sem nenhuma outra mudança no código da tela (P1).
+**Importante:** hoje a tela não faz nenhuma requisição. No topo de `frontend/js/api.js` há a constante `USAR_MOCK`, que está em `true`: com ela o cadastro e o login são simulados dentro do navegador. Com `false`, as mesmas funções passam a chamar o serviço, sem nenhuma outra mudança no código da tela (P1). O Lobby e o Ranking têm chaves próprias, `USAR_MOCK_LOBBY` e `USAR_MOCK_RANKING`, logo abaixo, e trocar o `USAR_MOCK` não mexe nelas ([guia do lobby](guia-backend-lobby.md)).
 
 ## 1. Como a tela funciona
 
@@ -38,7 +38,7 @@ O que isso significa para o servidor:
 - **A tela não lê o corpo da resposta do cadastro.** Para ela basta o status de sucesso. Mesmo assim, responda `id` e `nome`, que é o que o contrato pede (P4).
 - **Do login, a tela exige o campo `token`.** Sem ele, trata a resposta como erro. O objeto `usuario` é guardado do jeito que vier.
 - **Se o cadastro der certo e o login seguinte falhar**, a tela passa para a aba Entrar, preenche o e-mail e mostra um aviso próprio: "Sua conta foi criada, mas não foi possível entrar agora. Entre com seu e-mail e sua senha." Nesse caso a mensagem do servidor não aparece.
-- `lobby.html` ainda não existe. Depois do login o navegador mostra um erro 404, e isso é esperado por enquanto.
+- Depois do login, a tela abre o lobby (`lobby.html`). O que ele espera dos serviços Lobby e Ranking está no [guia do lobby](guia-backend-lobby.md).
 
 ### 1.2 O que a tela guarda no navegador
 
@@ -51,7 +51,7 @@ Tudo fica no `localStorage`, que continua valendo depois de fechar o navegador. 
 | `truco.mock.usuarios` | Usuários de mentira criados pelo mock | Só existe com `USAR_MOCK = true` |
 
 - **Para a tela, o token é só um texto.** Ela não abre o token, não confere a validade e não lê nada de dentro dele.
-- **"Estar logado" é ter algo em `truco.token`.** Quem abre `index.html` com um token guardado nem vê a tela: o navegador vai direto para `lobby.html`. Isso acontece mesmo que o token já tenha vencido (P13).
+- **"Estar logado" é ter algo em `truco.token`.** Quem abre `index.html` com um token guardado nem vê a tela: o navegador vai direto para `lobby.html`. Isso acontece mesmo que o token já tenha vencido: com o Lobby de verdade, a primeira chamada de lá volta com 401, e a tela apaga a sessão e volta para o login (seção 1.3; P13).
 - **Sair é apagar as duas chaves.** A função `sair()`, de `auth.js`, não chama o servidor, e o contrato não tem rota de logout (P3).
 
 ### 1.3 Como o token é enviado depois
@@ -62,7 +62,9 @@ Toda chamada à API passa pela função `requisitar`, de `api.js`. Quando existe
 Authorization: Bearer <token>
 ```
 
-É assim que o token vai chegar às rotas do Lobby e do Ranking, que as próximas telas vão usar, e à rota `GET /api/auth/me`. No WebSocket da mesa o token vai na URL (`?token=<jwt>`), porque o navegador não permite cabeçalhos nesse tipo de conexão. O [guia da mesa](guia-backend-mesa.md) explica essa parte.
+É assim que o token chega às rotas do Lobby e do Ranking, usadas pelo lobby, e à rota `GET /api/auth/me`. No WebSocket da mesa o token vai na URL (`?token=<jwt>`), porque o navegador não permite cabeçalhos nesse tipo de conexão. O [guia da mesa](guia-backend-mesa.md) explica essa parte.
+
+Quando uma rota responde 401, `requisitar` apaga a sessão (com a função `sair()`, de `auth.js`) e volta para a tela de login. Isso vale para todas as rotas, menos `/api/auth/cadastro` e `/api/auth/login`: nelas o 401 quer dizer e-mail ou senha incorretos, e a tela só mostra a mensagem (seção 4.3). A tela olha só o status, e não o código do erro.
 
 Um detalhe: `requisitar` manda o cabeçalho em **qualquer** chamada, inclusive cadastro e login, se houver token guardado. Na prática isso é raro, porque quem tem token é levado para o lobby antes de ver a tela. Mesmo assim, o cadastro e o login devem ignorar esse cabeçalho, ainda que ele traga um token vencido.
 
@@ -100,7 +102,7 @@ Os usuários podem ficar na memória, como no exemplo 8.1. Já dá para criar co
 - [ ] Erro de e-mail repetido vindo do banco convertido em 409 (seção 7.3).
 - [ ] Serviço no Docker Compose, com o Uvicorn em `--host 0.0.0.0`.
 - [ ] Rota `/api/auth` no Nginx (seção 3.1).
-- [ ] `USAR_MOCK = false` na tela e mock apagado de `api.js` (P1).
+- [ ] `USAR_MOCK = false` na tela e o mock do Auth apagado de `api.js` (P1).
 
 ## 3. Rotas
 
@@ -223,7 +225,7 @@ Resposta de sucesso, com status **200**:
 | Campo | Tipo | Obrigatório | Uso pela tela |
 |---|---|---|---|
 | `token` | texto | **Sim** | Guardado em `truco.token` e enviado nas chamadas seguintes. Se faltar, vier vazio ou vier com outro nome, a tela não entra e mostra "Algo deu errado. Tente de novo." |
-| `usuario` | objeto | Sim, pelo contrato | Guardado inteiro em `truco.usuario`. A tela de login não lê os campos; as próximas telas vão ler. |
+| `usuario` | objeto | Sim, pelo contrato | Guardado inteiro em `truco.usuario`. A tela de login não lê os campos; o lobby usa o `id` e o `nome`. |
 | `usuario.id` | texto | Sim, pelo contrato | O mesmo valor que vai no `sub` do token (seção 6.3). |
 | `usuario.nome` | texto | Sim, pelo contrato | O nome cadastrado. |
 | `usuario.email` | texto | Sim, pelo contrato | O mock devolve em minúsculas, mesmo que o usuário tenha digitado com maiúsculas (P7). |
@@ -419,10 +421,10 @@ O campo `exp` guarda o momento em que o token deixa de valer, em segundos contad
 
 Quanto tempo o token vale é uma decisão em aberto (P13). O exemplo usa 24 horas. O que pesar:
 
-- A tela não renova o token e não percebe quando ele vence (seção 1.2). Com um prazo curto, o usuário passa a receber erro no meio do uso.
+- A tela não renova o token e não percebe quando ele vence (seção 1.2). Com um prazo curto, o usuário é mandado de volta para o login no meio do uso: a primeira chamada depois do vencimento volta com 401 (seção 1.3).
 - Com um prazo longo demais, um token que vazar continua valendo por muito tempo, e não há como cancelá-lo antes (P3).
 
-Hoje, com um token vencido guardado, a tela de login continua mandando o usuário direto para o lobby, onde todas as chamadas vão voltar com 401.
+Hoje, com um token vencido guardado, a tela de login continua mandando o usuário direto para o lobby. Lá, a primeira chamada a um serviço de verdade volta com 401, e a tela apaga a sessão e volta para o login.
 
 ### 6.5 O segredo
 
@@ -815,7 +817,7 @@ O FastAPI monta sozinho uma página de testes, que funciona em qualquer sistema.
 
 A tela e a API precisam estar no mesmo endereço, porque a tela chama `/api/auth/...` no endereço de onde ela mesma foi carregada. Quando o gateway existir, basta subir tudo com o Docker Compose e abrir `http://localhost`. Enquanto ele não existe, o próprio serviço de teste pode entregar os arquivos da tela:
 
-1. Em `frontend/js/api.js`, troque a linha 13 para `const USAR_MOCK = false;`. É a única mudança no frontend. Não faça commit dela antes de o Auth estar rodando para toda a equipe: sem o serviço no ar, ninguém consegue entrar pela tela.
+1. Em `frontend/js/api.js`, troque a linha 13 para `const USAR_MOCK = false;`. É a única mudança no frontend: as chaves do Lobby e do Ranking, nas linhas 21 e 22, podem continuar em `true`. Não faça commit dela antes de o Auth estar rodando para toda a equipe: sem o serviço no ar, ninguém consegue entrar pela tela.
 2. Acrescente este trecho no **fim** do `main.py` de teste, depois de `app.include_router(rotas)`, trocando o caminho pelo da pasta `frontend` do repositório:
 
 ```python
@@ -828,7 +830,7 @@ app.mount("/", StaticFiles(directory="caminho/para/frontend", html=True))
 
 3. Abra `http://localhost:8002/` e recarregue com Ctrl+Shift+R, para o navegador não usar uma cópia antiga do `api.js`.
 4. Limpe o que o mock ou um teste anterior deixou guardado: aperte F12, vá ao Console e rode `localStorage.clear()`. Se sobrar um token antigo, a tela pula direto para `lobby.html`; nesse caso rode o comando ali mesmo e abra o endereço de novo.
-5. Crie uma conta. O navegador vai para `lobby.html`, que ainda não existe, e mostra `{"detail":"Not Found"}`. Isso é esperado.
+5. Crie uma conta. O navegador vai para o lobby, que continua com as salas e o ranking falsos, porque as chaves dele seguem em `true`.
 6. Confira o que ficou guardado: F12, aba Application (ou Armazenamento), Local Storage. `truco.token` tem que ser um JWT, com três partes separadas por ponto, e `truco.usuario` tem que ter `id`, `nome` e `email`.
 7. Para voltar à tela de login, rode `localStorage.clear()` no Console e abra `http://localhost:8002/` de novo. Teste então o e-mail repetido e a senha errada: a `mensagem` do servidor tem que aparecer na caixa do cartão.
 
@@ -855,14 +857,14 @@ Abrir a tela por `python -m http.server`, como no desenvolvimento do frontend, n
 
 ### Diferenças entre a tela e o documento de contratos
 
-- **P1. A tela ainda usa o mock.** `USAR_MOCK` está em `true` em `frontend/js/api.js`, e nenhuma requisição sai do navegador. Quando o Auth estiver no ar pelo gateway, falta o frontend virar a constante para `false` e apagar o mock do arquivo. Para o servidor, basta cumprir as seções 3 a 5.
+- **P1. A tela ainda usa o mock.** `USAR_MOCK` está em `true` em `frontend/js/api.js`, e nenhuma requisição sai do navegador. Quando o Auth estiver no ar pelo gateway, falta o frontend virar a constante para `false` e apagar o mock do Auth do arquivo. O Lobby e o Ranking têm chaves e mocks próprios, que saem quando esses serviços estiverem no ar. Para o servidor, basta cumprir as seções 3 a 5.
 - **P2. `GET /api/auth/me` não é usado.** A rota está no contrato, mas nenhuma tela a chama. Decidir se o frontend passa a usá-la, por exemplo para conferir o token ao abrir o lobby, ou se ela fica só para testes.
 - **P3. Logout sem rota.** O requisito RF02 pede login e logout, mas o contrato não tem rota de logout. Hoje sair é apagar o token do navegador, e o token continua valendo até vencer. Decidir se isso basta.
 - **P4. Resposta do cadastro.** O contrato pede `id` e `nome`, mas não diz o status. A tela não lê o corpo e aceita qualquer status de sucesso. Este guia usa 201. Confirmar.
 
 ### O que o código da tela assume sem estar escrito
 
-- **P5. Códigos e status de erro.** O contrato define só o formato `{"erro", "mensagem"}`. `email_ja_cadastrado` (409) e `credenciais_invalidas` (401) foram escolhidos no mock da tela. `token_invalido` e `token_expirado` (401) são proposta deste guia. A tela de login não depende dos códigos, mas as próximas telas vão depender (P13). Fechar a lista e avisar o frontend.
+- **P5. Códigos e status de erro.** O contrato define só o formato `{"erro", "mensagem"}`. `email_ja_cadastrado` (409) e `credenciais_invalidas` (401) foram escolhidos no mock da tela. `token_invalido` e `token_expirado` (401) são proposta deste guia. A tela de login não depende dos códigos, e o lobby também não: ele só olha o status ([guia do lobby](guia-backend-lobby.md), seção 5.3). Fechar a lista e avisar o frontend.
 - **P6. Dados inválidos.** Nem a tela nem o mock têm código ou status para dados inválidos, porque a tela valida antes de enviar. A proposta é 422 `dados_invalidos`, já que 422 é o status que o FastAPI usa nesse caso. Confirmar, e decidir se a `mensagem` é única ou uma por regra.
 - **P7. E-mail sem diferenciar maiúsculas de minúsculas.** O mock trata `Ana@Teste.com` e `ana@teste.com` como a mesma conta e devolve o e-mail em minúsculas. Isso não está no contrato. Confirmar e incluir.
 - **P8. Conta ativa na hora.** A tela faz o login automaticamente logo depois do cadastro. Isso exclui confirmação de e-mail ou qualquer etapa entre criar a conta e poder entrar. Confirmar que é o comportamento desejado.
@@ -873,7 +875,7 @@ Abrir a tela por `python -m http.server`, como no desenvolvimento do frontend, n
 ### Token
 
 - **P12. Conteúdo do token.** O contrato diz que cada serviço valida o JWT sozinho, mas não diz o algoritmo, os campos nem como o segredo é compartilhado. Este guia propõe HS256, `sub` com o id, `nome` e `exp`, e a variável de ambiente `JWT_SEGREDO`. Combinar com quem faz Lobby, Game e Ranking. O P17 do guia da mesa é a mesma pergunta, vista pelo Game.
-- **P13. Expiração.** Falta decidir por quanto tempo o token vale; o exemplo usa 24 horas. A tela não renova o token e não percebe quando ele vence: considera o usuário logado enquanto houver algo em `truco.token`, e nenhuma tela trata 401 ainda. Falta o frontend, ao receber 401 de token vencido ou inválido, apagar a sessão e voltar para o login. Para isso os códigos de erro de token precisam ser os mesmos em todos os serviços (P5).
+- **P13. Expiração.** Falta decidir por quanto tempo o token vale; o exemplo usa 24 horas. A tela não renova o token e não percebe quando ele vence: considera o usuário logado enquanto houver algo em `truco.token`. Quando uma rota que exige login responde 401, a tela apaga a sessão e volta para o login (seção 1.3). Como ela olha só o status, isso funciona com qualquer código de erro de token.
 - **P14. Token de serviço dos bots.** O contrato diz que o bot se conecta ao Game com "um token de serviço", sem dizer quem emite esse token nem o que vai dentro dele. Se for um JWT assinado com o mesmo segredo, alguém precisa emiti-lo: o Auth ou o próprio serviço de Bots. Decidir.
 
 ### Decisões do backend
