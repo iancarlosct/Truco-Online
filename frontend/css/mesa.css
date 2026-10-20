@@ -241,6 +241,14 @@ body {
   transform: translate(-50%, -50%) rotate(-90deg);
 }
 
+/* Mão do parceiro na mão de onze: abertas, em pé e um pouco maiores que os versos, para dar
+   para ler */
+.mao-parceiro {
+  --l: calc(var(--carta-op-l) * 1.15);
+  display: flex;
+  gap: 4px;
+}
+
 /* ---------- Sua mão ---------- */
 
 .mao {
@@ -251,11 +259,33 @@ body {
 }
 
 .carta-mao {
+  position: relative;
   padding: 0;
   border: 0;
   border-radius: calc(var(--l) * 0.052);
   background: none;
   transition: transform 0.15s ease, filter 0.15s ease;
+}
+
+/* "Jogar coberta" marcada: a face continua à vista, para o jogador escolher, mas com a cor do
+   verso por cima e o aviso de que a carta vai virada para a mesa */
+.mao.cobrindo .carta-mao::after {
+  content: "Coberta";
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px dashed rgba(217, 180, 91, 0.9);
+  border-radius: inherit;
+  background: rgba(23, 59, 72, 0.55);
+  color: var(--creme);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7);
+  text-transform: uppercase;
+  pointer-events: none;
 }
 
 .carta-mao:disabled {

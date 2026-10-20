@@ -79,6 +79,11 @@ function derivar(estado) {
   const conectado = ui.conexao === "conectado" || ui.conexao === "local";
   // Com a conexão caída ou a partida encerrada, nenhum controle de jogo fica clicável.
   const podeAgir = conectado && !encerrada;
+  // Rodada que a próxima carta joga. A rodada nova só entra em "rodadas" com a primeira carta
+  // dela (assim a rodada encerrada continua na mesa): se a última já tem vencedor, é a seguinte.
+  const ultima = maoAtual.rodadas.at(-1);
+  let numeroRodada = maoAtual.rodadas.length;
+  if (!ultima || ultima.vencedor_time) numeroRodada++;
 
   return {
     eu,
@@ -103,8 +108,11 @@ function derivar(estado) {
     // Truco e mão de onze valem para o time: no 2x2, os dois parceiros podem responder.
     trucoContraMim: Boolean(truco) && truco.pedido_por_time !== meuTime,
     decidindoMaoDeOnze: maoAtual.aguardando_decisao_mao_de_onze && estado.placar[meuTime] === 11,
+    numeroRodada,
+    // A mão está em jogo (alguém tem a vez): entre as mãos e depois do fim, não.
+    maoEmJogo: maoAtual.vez_assento !== null && maoAtual.vez_assento !== undefined && !encerrada,
     // "Jogar coberta" só fica disponível a partir da segunda rodada da mão.
-    podeCobrir: maoAtual.rodadas.length >= 2,
+    podeCobrir: numeroRodada >= 2,
   };
 }
 
@@ -119,8 +127,7 @@ export function enviar(mensagem) {
 }
 
 function jogarCarta(carta) {
-  const podeCobrir = estadoAtual.mao_atual.rodadas.length >= 2;
-  enviar({ tipo: "jogar_carta", carta, coberta: ui.coberta && podeCobrir });
+  enviar({ tipo: "jogar_carta", carta, coberta: ui.coberta && derivar(estadoAtual).podeCobrir });
   ui.coberta = false;
   renderizarMesa(estadoAtual);
 }
@@ -140,18 +147,31 @@ function enviarChat(texto) {
 
 // ---------- Componentes ----------
 
-// Mão do próprio jogador: cartas abertas, clicáveis apenas quando podeJogar.
-function criarMao(cartas, podeJogar, aoJogar) {
-  const mao = el("div", "mao");
+// Mão do próprio jogador: cartas abertas, clicáveis apenas quando podeJogar. Com "Jogar
+// coberta" marcada, cada carta mostra que vai para a mesa virada.
+function criarMao(cartas, podeJogar, cobrindo, aoJogar) {
+  const mao = el("div", cobrindo ? "mao cobrindo" : "mao");
   for (const codigo of cartas) {
     const botao = el("button", "carta-mao");
     botao.type = "button";
     botao.dataset.chave = `carta:${codigo}`;
     botao.disabled = !podeJogar;
-    botao.append(criarCarta(codigo));
+    const carta = criarCarta(codigo);
+    if (cobrindo) botao.setAttribute("aria-label", `${carta.alt}, coberta`);
+    botao.append(carta);
     botao.addEventListener("click", () => aoJogar(codigo));
     mao.append(botao);
   }
+  return mao;
+}
+
+// Mão do parceiro, que o time com 11 pontos vê na mão de onze: cartas abertas, menores e só
+// para olhar.
+function criarMaoParceiro(cartas) {
+  const mao = el("div", "mao-parceiro");
+  mao.setAttribute("role", "group");
+  mao.setAttribute("aria-label", "Mão do parceiro");
+  for (const codigo of cartas) mao.append(criarCarta(codigo));
   return mao;
 }
 
@@ -184,8 +204,9 @@ function criarJogador(jogador, { posicao, naVez, souEu, mao }) {
   return raiz;
 }
 
-// Marcadores das 3 rodadas da mão.
-function criarRodadas(rodadas) {
+// Marcadores das 3 rodadas da mão. Com a mão em jogo, a rodada que a próxima carta joga ganha
+// o contorno de "rodada atual".
+function criarRodadas(rodadas, ctx) {
   const bloco = el("div", "rodadas");
   const marcadores = el("div", "marcadores");
   for (let i = 0; i < 3; i++) {
@@ -193,15 +214,17 @@ function criarRodadas(rodadas) {
     const marcador = el("span", "marcador");
     if (vencedor === "empate") marcador.classList.add("empate");
     else if (vencedor) marcador.classList.add(classeTime(vencedor));
-    else if (rodadas.length > 0 && i === rodadas.length - 1) marcador.classList.add("atual");
+    else if (ctx.maoEmJogo && i === ctx.numeroRodada - 1) marcador.classList.add("atual");
     marcadores.append(marcador);
   }
   bloco.append(el("span", "rotulo-mesa", "Rodadas"), marcadores);
   return bloco;
 }
 
-// Centro da mesa: cartas da rodada atual, vira com a manilha e marcadores das rodadas.
-function criarCentro(maoAtual, posicaoDe) {
+// Centro da mesa: cartas da última rodada (a atual, ou a que acabou de terminar), vira com a
+// manilha e marcadores das rodadas.
+function criarCentro(maoAtual, ctx) {
+  const { posicaoDe } = ctx;
   const centro = el("div", "centro");
 
   const rodadaAtual = maoAtual.rodadas.at(-1);
@@ -217,7 +240,7 @@ function criarCentro(maoAtual, posicaoDe) {
   manilha.append(el("strong", "", proximaManilha(maoAtual.vira)));
   vira.append(el("span", "rotulo-mesa", "Vira"), criarCarta(maoAtual.vira), manilha);
 
-  centro.append(jogadas, vira, criarRodadas(maoAtual.rodadas));
+  centro.append(jogadas, vira, criarRodadas(maoAtual.rodadas, ctx));
   return centro;
 }
 
@@ -482,19 +505,22 @@ export function renderizarMesa(estado) {
   const feltro = el("div", "feltro");
   feltro.append(
     criarPlacar(estado.placar, maoAtual, ctx.meuTime, ctx.timeAdversario),
-    criarCentro(maoAtual, ctx.posicaoDe),
+    criarCentro(maoAtual, ctx),
   );
   if (!ctx.encerrada) feltro.append(criarBotaoSair());
   for (const jogador of estado.jogadores) {
     const souEu = jogador.assento === estado.meu_assento;
+    // A mão de outro jogador só vem do servidor na mão de onze, para o parceiro do time com 11.
+    let mao;
+    if (souEu) mao = criarMao(jogador.mao ?? [], ctx.podeJogar, ui.coberta && ctx.podeCobrir, jogarCarta);
+    else if (jogador.mao) mao = criarMaoParceiro(jogador.mao);
+    else mao = criarMaoOculta(jogador.qtd_cartas);
     feltro.append(
       criarJogador(jogador, {
         posicao: ctx.posicaoDe(jogador.assento),
         naVez: jogador.assento === maoAtual.vez_assento,
         souEu,
-        mao: souEu
-          ? criarMao(jogador.mao ?? [], ctx.podeJogar, jogarCarta)
-          : criarMaoOculta(jogador.qtd_cartas),
+        mao,
       }),
     );
   }

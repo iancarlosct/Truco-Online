@@ -5,6 +5,7 @@
 export const inicio1x1 = {
   partida_id: "mock-inicio-1x1",
   formato: "1x1",
+  status: "em_andamento",
   meu_assento: 0,
   jogadores: [
     { assento: 0, nome: "Ian", time: "A", bot: false, mao: ["3P", "KC", "6O"], qtd_cartas: 3 },
@@ -20,7 +21,7 @@ export const inicio1x1 = {
     truco_pendente: null,
     ultimo_aumento_time: null,
     aguardando_decisao_mao_de_onze: false,
-    rodadas: [{ jogadas: [], vencedor_time: null }],
+    rodadas: [],
     vez_assento: 0,
   },
   chat: [],
@@ -31,6 +32,7 @@ export const inicio1x1 = {
 export const meio2x2 = {
   partida_id: "mock-meio-2x2",
   formato: "2x2",
+  status: "em_andamento",
   meu_assento: 0,
   jogadores: [
     { assento: 0, nome: "Ian", time: "A", bot: false, mao: ["3P", "KC"], qtd_cartas: 2 },
@@ -77,6 +79,7 @@ export const meio2x2 = {
 export const trucoPendente2x2 = {
   partida_id: "mock-truco-2x2",
   formato: "2x2",
+  status: "em_andamento",
   meu_assento: 1,
   jogadores: [
     { assento: 0, nome: "Ana", time: "A", bot: false, qtd_cartas: 3 },
@@ -113,6 +116,7 @@ export const trucoPendente2x2 = {
 export const maoDeOnze1x1 = {
   partida_id: "mock-onze-1x1",
   formato: "1x1",
+  status: "em_andamento",
   meu_assento: 0,
   jogadores: [
     { assento: 0, nome: "Ian", time: "A", bot: false, mao: ["3O", "AE", "5P"], qtd_cartas: 3 },
@@ -128,7 +132,7 @@ export const maoDeOnze1x1 = {
     truco_pendente: null,
     ultimo_aumento_time: null,
     aguardando_decisao_mao_de_onze: true,
-    rodadas: [{ jogadas: [], vencedor_time: null }],
+    rodadas: [],
     vez_assento: 1,
   },
   chat: [{ de: "Carla", texto: "vai correr?" }],
