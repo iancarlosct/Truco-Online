@@ -67,8 +67,8 @@ function mensagemPadrao(status) {
 
 // Resposta 401 numa rota que exige login: o token venceu ou não vale mais. Apaga a sessão e
 // volta para a tela de login, que avisa o motivo. Fica aqui, e não em cada tela, para valer em
-// todas elas.
-function encerrarSessao() {
+// todas elas. O ws.js usa a mesma função quando o Game recusa o token (fechamento 4401).
+export function encerrarSessao() {
   sair();
   location.replace(PAGINA_SESSAO_EXPIRADA);
 }
@@ -466,6 +466,14 @@ function iniciarSalaMock(sala) {
   sala.status = "em_partida";
   sala.partida_id = `mock-${sala.id}-${Date.now().toString(36)}`;
   return { partida_id: sala.partida_id };
+}
+
+// Para o mock do Game (js/mock/servidor-game.js), no lugar do POST /interno/partidas que o
+// Lobby faria ao iniciar: a sala do mock que começou a partida com este partida_id, com os
+// assentos, ou null. Só lê: não muda nada nas salas.
+export function salaDaPartidaMock(partidaId) {
+  const sala = lerSalasMock().salas.find((s) => s.partida_id === partidaId);
+  return sala ? JSON.parse(JSON.stringify(sala)) : null;
 }
 
 function mockListarSalas() {

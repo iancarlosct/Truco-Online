@@ -4,12 +4,13 @@ Este guia é para quem vai implementar o serviço Game em Python com FastAPI. El
 
 **De onde vêm as informações**
 
-- **Código da tela**: `frontend/mesa.html`, `frontend/js/paginas/mesa.js`, `frontend/js/cartas.js` e `frontend/js/mock/estados.js`, na branch `feature/frontend-mesa` em 10/10/2026. Tudo o que o guia afirma que a tela lê, mostra ou envia saiu desse código e foi conferido rodando a tela no navegador com variações do estado.
-- **Documento de requisitos e contratos** (link no [README](../README.md)): usado para o que o código ainda não cobre, como o endereço do WebSocket e as demais mensagens do protocolo.
+- **Código da tela**: `frontend/mesa.html`, `frontend/js/paginas/mesa.js`, `frontend/js/cartas.js` e `frontend/js/mock/estados.js`, na branch `feature/frontend-mesa` em 10/10/2026. Tudo o que o guia afirma que a tela lê, mostra ou envia saiu desse código e foi conferido rodando a tela no navegador com variações do estado. Atualizado em 20/10/2026 (branch `feature/frontend-partida`): a mesa passou a se conectar sozinha, pelo `frontend/js/ws.js`, e ganhou a espera, a reconexão, a tela de fim de partida e a saída.
+- **Decisões de protocolo de 20/10/2026**: só as mensagens `estado` e `erro` do servidor, o campo `status`, os códigos de erro e de fechamento, a mão do parceiro na mão de onze, a primeira resposta do time no 2x2, a criação da rodada e a pausa entre as mãos. Elas aparecem como regras no texto e ainda não estão no documento de contratos. Os pontos em aberto que elas fecham estão marcados como resolvidos na seção 9.
+- **Documento de requisitos e contratos** (link no [README](../README.md)): usado para o que o código ainda não cobre, como o endereço do WebSocket.
 
 Quando os dois não batem, ou quando o código depende de algo que não está escrito em lugar nenhum, o texto traz um código como **P3**. Ele aponta para o item correspondente da seção 9, Pontos em aberto.
 
-**Importante:** a tela ainda não abre conexão com servidor nenhum. Hoje o estado vem dos mocks e as ações do jogador só são escritas no console do navegador (P1). A ligação com o WebSocket será feita no frontend; este guia descreve o lado do servidor.
+**Importante:** a tela já se conecta, mas hoje conversa com um servidor simulado, que roda dentro do navegador (`frontend/js/mock/servidor-game.js`). No topo de `frontend/js/ws.js`, a constante `USAR_MOCK_GAME` está em `true`. Com `false`, a mesma conexão vai para o Game de verdade, em `/ws/partidas/...` no mesmo endereço da página, sem nenhuma outra mudança no código (seção 8.3). O servidor simulado não é o motor de regras: ele existe só para testar a tela. Este guia descreve o lado do servidor.
 
 ## 1. Como a tela funciona
 
@@ -31,7 +32,13 @@ O que isso significa para o servidor:
 - Nada muda na tela até chegar um novo `estado`. Se o jogador clica numa carta, ela continua na mão dele até o servidor mandar o estado sem ela.
 - A tela habilita e desabilita botões olhando o estado (seção 4.4). Isso é comodidade para o jogador, não segurança: o servidor valida tudo de novo.
 
-O pouco que a tela calcula sozinha serve só para exibir: a posição de cada jogador em volta da mesa (a partir de `meu_assento`), "Nós" e "Eles" no placar (a partir do time do jogador), a manilha (valor seguinte ao da `vira`) e o texto do botão de truco (a partir de `valor`).
+O pouco que a tela calcula sozinha serve só para exibir: a posição de cada jogador em volta da mesa (a partir de `meu_assento`), "Nós" e "Eles" no placar (a partir do time do jogador), a manilha (valor seguinte ao da `vira`), o texto do botão de truco (a partir de `valor`) e a rodada da próxima carta (a partir de `rodadas`, seção 4.1).
+
+Além da mesa, a tela tem três situações que dependem da conexão e do `status`:
+
+- **Espera.** Até chegar o primeiro `estado`, a tela mostra só "Conectando à partida…".
+- **Queda.** Se a conexão cai, a mesa continua na tela com "Conexão perdida. Reconectando…" e os controles desabilitados, e a tela tenta conectar de novo sozinha (seção 6.6).
+- **Fim de partida.** Com `"status": "encerrada"`, aparece sobre a mesa o resultado, o placar final e o botão "Voltar ao lobby" (seção 6.4).
 
 ## 2. Checklist do que o backend precisa entregar
 
@@ -47,7 +54,7 @@ Na ordem recomendada. Cada etapa termina em algo que dá para ver funcionando.
 **Etapa 2: cada jogador vê a sua própria mesa**
 
 - [ ] Validação do token (`?token=<jwt>`) e descoberta do assento do jogador na partida.
-- [ ] Recusa de token inválido, partida inexistente ou usuário que não está na partida.
+- [ ] Recusa de token inválido, partida inexistente ou usuário que não está na partida, com os códigos 4401, 4404 e 4403 (seção 3.4).
 - [ ] Registro das conexões abertas por partida e assento, com remoção ao desconectar.
 - [ ] Visão filtrada por jogador: `meu_assento`, `mao` só do próprio, `qtd_cartas` de todos, carta coberta sem valor (seção 4.3).
 - [ ] Envio do `estado` a todos os conectados sempre que ele mudar.
@@ -55,23 +62,22 @@ Na ordem recomendada. Cada etapa termina em algo que dá para ver funcionando.
 
 **Etapa 3: uma partida 1x1 do começo ao fim**
 
-- [ ] Partida criada já com a primeira mão distribuída (P9).
+- [ ] Partida criada já com a primeira mão distribuída: todo `estado` precisa de `mao_atual` (seção 3.3).
 - [ ] `jogar_carta` com validação e atualização de `rodadas`, `qtd_cartas` e `vez_assento`.
-- [ ] Fim de rodada (`vencedor_time`) e abertura da rodada seguinte antes da primeira carta dela (P10).
-- [ ] Fim de mão: `placar` atualizado e nova mão (`numero`, `pe`, `vira`, cartas e `valor` inicial).
+- [ ] Fim de rodada (`vencedor_time`), com a rodada seguinte criada só na primeira carta dela (seção 6.4).
+- [ ] Fim de mão: `placar` atualizado e, depois de uns 2 segundos, nova mão (`numero`, `pe`, `vira`, cartas e `valor` inicial).
 - [ ] `pedir_truco` e `responder_truco`, mantendo `valor`, `truco_pendente` e `ultimo_aumento_time`.
-- [ ] Ação inválida não muda o estado e gera `erro` só para quem enviou.
-- [ ] Fim de partida aos 12 pontos (P9).
+- [ ] Ação inválida não muda o estado e gera `erro` só para quem enviou, com um dos códigos da seção 6.2.
+- [ ] Fim de partida aos 12 pontos: `"status": "encerrada"` e `vencedor_time` (seção 6.4).
 
 **Etapa 4: comportamento completo**
 
-- [ ] 2x2: quatro assentos, times alternados, resposta ao truco pelo time (P11).
+- [ ] 2x2: quatro assentos, times alternados, resposta ao truco pelo time, valendo a primeira (seção 5.3).
 - [ ] Carta coberta a partir da segunda rodada.
-- [ ] Mão de onze: `tipo`, `aguardando_decisao_mao_de_onze` e `decidir_mao_de_onze` (P4, P6).
+- [ ] Mão de onze: `tipo`, `aguardando_decisao_mao_de_onze` e `decidir_mao_de_onze` (P4), com a mão do parceiro para o time com 11 (seção 4.3).
 - [ ] Mão de ferro (P13).
-- [ ] Demais mensagens do contrato: `truco_pedido`, `rodada_encerrada`, `mao_encerrada`, `partida_encerrada` e `chat` (P16).
 - [ ] Bots conectando como clientes comuns.
-- [ ] Queda de conexão e volta do jogador (P8, P20).
+- [ ] Volta do jogador depois de uma queda: a nova conexão recebe o estado atual (seção 6.6; P20).
 
 ## 3. Conexão WebSocket
 
@@ -116,7 +122,7 @@ Um detalhe para saber: o token aparece inteiro nos logs de acesso do Uvicorn e d
 5. Fica lendo as mensagens daquele jogador até a conexão cair.
 6. Quando cair, tira a conexão da lista. O estado da partida continua guardado.
 
-A tela não tem estado de "aguardando jogadores" nem de "partida encerrada": todo `estado` precisa trazer os 2 ou 4 jogadores e uma `mao_atual` preenchida (P9).
+Até o primeiro `estado`, a tela mostra "Conectando à partida…". Ela não tem uma tela de "aguardando jogadores": todo `estado` precisa trazer os 2 ou 4 jogadores e uma `mao_atual` preenchida, por isso a partida já nasce com a primeira mão distribuída. O fim da partida vem no próprio `estado`, pelo `status` (seção 6.4).
 
 ### 3.4 Como recusar uma conexão
 
@@ -127,9 +133,16 @@ Há duas formas, e o navegador enxerga cada uma de um jeito:
 | `close()` sem ter chamado `accept()` | Falha de conexão com código 1006 e sem motivo. O servidor responde HTTP 403. |
 | `accept()` e depois `close(code=4401, reason="token inválido")` | Fechamento com o código 4401 e o motivo informado. |
 
-A segunda forma permite que a tela diferencie "token inválido" de "partida não existe". Os códigos de 4000 a 4999 são livres para a aplicação. Quais usar ainda não foi combinado (P18).
+Para recusar, use sempre a segunda forma, com um destes códigos:
 
-Um caminho errado na URL também aparece como 403 e 1006. Se a conexão "falha sem motivo", confira primeiro o caminho.
+| Código | Quando | O que a tela faz |
+|---|---|---|
+| 4401 | Token ausente, inválido ou vencido | Apaga a sessão e volta para o login, que mostra "Sua sessão expirou. Entre novamente.", como num 401 das rotas HTTP |
+| 4403 | O usuário do token não está na partida | Mostra "Você não faz parte desta partida." e volta para o lobby em 5 segundos |
+| 4404 | Não existe partida com esse `partida_id` | Mostra "Esta partida não existe." e volta para o lobby em 5 segundos |
+| Qualquer outro, inclusive o 1006 | Queda | Tenta conectar de novo, sozinha (seção 6.6) |
+
+**O servidor precisa chamar `accept()` antes de fechar com 4401, 4403 ou 4404.** Uma recusa sem `accept()` chega à tela como queda (1006): ela não sai da partida e fica tentando reconectar indefinidamente. Um caminho errado na URL também aparece como 403 e 1006. Se a conexão "falha sem motivo", confira primeiro o caminho.
 
 ### 3.5 Atrás do Docker e do Nginx
 
@@ -150,11 +163,11 @@ location /ws/ {
 
 ## 4. A mensagem `estado`
 
-É a única mensagem que a tela usa para se desenhar. O contrato a descreve assim: "a mensagem `estado` é a fonte da verdade para a tela: o frontend sempre redesenha a mesa a partir dela".
+É a única mensagem que a tela usa para se desenhar. O contrato a descreve assim: "a mensagem `estado` é a fonte da verdade para a tela: o frontend sempre redesenha a mesa a partir dela". O servidor só manda dois tipos de mensagem: o `estado` e o `erro` (seção 6.2).
 
 ### 4.1 Campos
 
-A mensagem é um objeto JSON com `"tipo": "estado"` e os campos abaixo, todos no primeiro nível (P2).
+A mensagem é um objeto JSON com `"tipo": "estado"` e os campos abaixo, todos no primeiro nível.
 
 Como ler a coluna **Obrigatório**: *Sim* quer dizer que, sem o campo, a tela quebra (aparece um erro no console do navegador e ela fica parada no desenho anterior) ou mostra informação errada. *Não* quer dizer que a tela funciona sem ele; o que ela assume na ausência está na última coluna.
 
@@ -162,11 +175,13 @@ Como ler a coluna **Obrigatório**: *Sim* quer dizer que, sem o campo, a tela qu
 
 | Campo | Tipo | Obrigatório | Valores e uso pela tela |
 |---|---|---|---|
-| `tipo` | texto | Sim, pelo contrato | Sempre `"estado"`. A função que desenha a tela ignora este campo; ele serve para separar o `estado` das outras mensagens (P2). |
-| `meu_assento` | inteiro | **Sim** | Assento do jogador que recebe a mensagem. Tem que ser igual ao `assento` de um dos `jogadores`, senão a tela quebra. Não existe no estado guardado no servidor: é acrescentado na visão de cada jogador (P3). |
-| `jogadores` | lista | **Sim** | Exatamente 2 itens (1x1) ou 4 itens (2x2). Com outra quantidade a tela quebra (P9). A ordem da lista não importa: vale o campo `assento`. |
+| `tipo` | texto | **Sim** | Sempre `"estado"`. É ele que separa o `estado` da mensagem `erro`: sem ele, a tela ignora a mensagem. |
+| `status` | texto | **Sim** | `"em_andamento"` ou `"encerrada"`. Com `"encerrada"`, a tela mostra o fim de partida sobre a mesa e desabilita os controles de jogo; o chat continua. Ausente, a tela trata como `"em_andamento"`. |
+| `vencedor_time` | texto | Só com `"encerrada"` | `"A"` ou `"B"`. A tela compara com o time do jogador e escreve "Você venceu!" ou "Você perdeu" no 1x1, "Vocês venceram!" ou "Vocês perderam" no 2x2. |
+| `meu_assento` | inteiro | **Sim** | Assento do jogador que recebe a mensagem. Tem que ser igual ao `assento` de um dos `jogadores`, senão a tela quebra. Não existe no estado guardado no servidor: é acrescentado na visão de cada jogador. Faz parte do protocolo (P3). |
+| `jogadores` | lista | **Sim** | Exatamente 2 itens (1x1) ou 4 itens (2x2). Com outra quantidade a tela quebra. A ordem da lista não importa: vale o campo `assento`. |
 | `placar` | objeto | **Sim** | `{"A": 4, "B": 7}`. As duas chaves, com números. |
-| `mao_atual` | objeto | **Sim** | Nunca `null` (P9). |
+| `mao_atual` | objeto | **Sim** | Nunca `null`, nem depois do fim da partida (seção 6.4). |
 | `chat` | lista | **Sim** | Pode ser `[]`, mas tem que existir. |
 | `partida_id` | texto | Não | A tela não lê. |
 | `formato` | texto | Não | `"1x1"` ou `"2x2"`. A tela não lê: ela usa a quantidade de `jogadores`. |
@@ -179,8 +194,8 @@ Como ler a coluna **Obrigatório**: *Sim* quer dizer que, sem o campo, a tela qu
 | `nome` | texto | **Sim** | Aparece na plaquinha do jogador e no aviso "Vez de Fulano.". Também define a cor do autor no chat (P14). |
 | `time` | texto | **Sim** | Exatamente `"A"` ou `"B"`, em maiúsculas. Qualquer outro valor é tratado como B. |
 | `bot` | booleano | Não | `true` mostra o selo "BOT". Ausente equivale a `false`. |
-| `mao` | lista de cartas | Só no item do próprio jogador | Códigos das cartas que ele tem na mão (seção 4.2). Ausente equivale a mão vazia. Nos outros jogadores a tela ignora este campo (P6). |
-| `qtd_cartas` | inteiro | **Sim** nos outros jogadores | Quantidade de versos que a tela desenha. No item do próprio jogador a tela não lê: usa o tamanho de `mao`. |
+| `mao` | lista de cartas | No item do próprio jogador e, na mão de onze, no do parceiro (seção 4.3) | Códigos das cartas que ele tem na mão (seção 4.2). Ausente equivale a mão vazia. No item de outro jogador, a tela mostra essas cartas abertas e menores, junto ao jogador, no lugar dos versos. |
+| `qtd_cartas` | inteiro | **Sim** nos outros jogadores | Quantidade de versos que a tela desenha quando o item não traz `mao`. No item do próprio jogador a tela não lê: usa o tamanho de `mao`. |
 
 A tela posiciona cada jogador pela diferença entre o `assento` dele e o `meu_assento`: o próprio jogador fica embaixo, o assento seguinte à direita, depois em cima e por fim à esquerda (no 1x1, embaixo e em cima). Pelo contrato, a ordem de jogo segue a numeração dos assentos, então na tela a vez anda no sentido anti-horário. No 2x2 os assentos 0 e 2 são o time A e os assentos 1 e 3 o time B, por isso o parceiro aparece em frente. A tela não deduz o time pelo assento: ela lê `time`.
 
@@ -192,11 +207,11 @@ A tela posiciona cada jogador pela diferença entre o `assento` dele e o `meu_as
 | `vira` | carta | **Sim** | Sempre um código de carta válido. `null` quebra a tela (P13). A manilha é calculada pela tela. |
 | `valor` | inteiro | **Sim** | 1, 3, 6, 9 ou 12. Aparece como "Valendo 3" e define o texto do botão de truco: 1 mostra "Truco", 3 "Seis", 6 "Nove", 9 "Doze" (P12). |
 | `tipo` | texto | **Sim** | `"normal"`, `"mao_de_onze"` ou `"mao_de_ferro"`. Os dois últimos mostram um selo no placar. Qualquer valor diferente de `"normal"` desabilita o botão de truco. |
-| `rodadas` | lista | **Sim** | Pode ser `[]`, mas tem que existir. Formato mais abaixo. |
-| `vez_assento` | inteiro ou `null` | **Sim** | Assento de quem joga agora. Com `null` (ou sem o campo) ninguém fica destacado e nenhuma carta fica clicável (P10). |
+| `rodadas` | lista | **Sim** | `[]` no começo da mão: cada rodada só entra na lista com a primeira carta dela (seção 6.4). Formato mais abaixo. |
+| `vez_assento` | inteiro ou `null` | **Sim** | Assento de quem joga agora. Com `null` (ou sem o campo) ninguém fica destacado, nenhuma carta fica clicável e a barra de ações mostra "Fim da mão.". É assim entre as mãos e depois do fim da partida (seção 6.4). |
 | `truco_pendente` | objeto ou `null` | Não | `null` ou ausente quando não há pedido em aberto. Formato mais abaixo. |
 | `ultimo_aumento_time` | texto ou `null` | Não | `"A"`, `"B"` ou `null`. O time indicado fica com o botão de truco desabilitado (P12). |
-| `aguardando_decisao_mao_de_onze` | booleano | Não | Ausente equivale a `false`. Tem que ser `true` para os botões da mão de onze aparecerem. Não está no documento de contratos (P4). |
+| `aguardando_decisao_mao_de_onze` | booleano | Não | Ausente equivale a `false`. Tem que ser `true` para os botões da mão de onze aparecerem. Faz parte do protocolo (P4). |
 | `pe` | inteiro | Não | A tela não lê. |
 
 **`truco_pendente`, quando não é `null`**
@@ -230,14 +245,10 @@ A tela posiciona cada jogador pela diferença entre o `assento` dele e o `meu_as
 
 **Como a tela usa `rodadas`**
 
-- No centro da mesa aparecem **só as cartas do último item** da lista.
-- Os três marcadores de rodada usam o `vencedor_time` das três primeiras posições: cor do time, cinza para `"empate"`, vazio para `null`. O último item da lista, se ainda não tem vencedor, ganha um contorno de "rodada atual".
-- A opção "Jogar coberta" fica disponível quando a lista tem 2 itens ou mais.
-
-Isso traz duas exigências que não estão escritas em lugar nenhum (P10):
-
-1. O item da nova rodada tem que entrar em `rodadas` **antes** da primeira carta dela, com `"jogadas": []`. Se ele só for criado quando a primeira carta for jogada, quem abre a segunda rodada não consegue marcar "Jogar coberta".
-2. Se a nova rodada entrar na lista no mesmo instante em que a anterior termina, a última carta da rodada anterior nunca aparece na mesa. Para os jogadores verem a rodada fechada, é preciso um estado intermediário (seção 6.4).
+- No centro da mesa aparecem **só as cartas do último item** da lista. Como a rodada nova só é criada com a primeira carta dela, a rodada que acabou de terminar continua na mesa até alguém abrir a seguinte.
+- A tela calcula a rodada da próxima carta: se a lista está vazia ou o último item já tem `vencedor_time`, é a rodada seguinte; senão, é a do último item.
+- Os três marcadores de rodada usam o `vencedor_time` das três primeiras posições: cor do time, cinza para `"empate"`, vazio para `null`. A rodada da próxima carta ganha um contorno de "rodada atual", se alguém tem a vez.
+- A opção "Jogar coberta" fica disponível quando a próxima carta é da segunda rodada em diante. Marcada, as cartas da mão aparecem com a cor do verso por cima e o aviso "Coberta".
 
 ### 4.2 Cartas
 
@@ -257,11 +268,11 @@ Um código fora desse padrão (`7o`, `10P`) não gera erro, mas a carta aparece 
 O estado completo, com as cartas de todos, fica só no servidor. Cada jogador recebe uma visão montada para ele:
 
 1. **`meu_assento`** é o assento de quem recebe a mensagem.
-2. **`mao`** só aparece no item do próprio jogador. Nos demais itens ela não é enviada. A tela até ignoraria, mas as cartas chegariam ao navegador e qualquer um poderia vê-las nas ferramentas de desenvolvedor.
+2. **`mao`** só aparece no item do próprio jogador, fora a exceção da regra 6. Nos demais itens ela não é enviada: a tela mostraria essas cartas abertas, e elas chegariam ao navegador, onde qualquer um poderia vê-las nas ferramentas de desenvolvedor.
 3. **`qtd_cartas`** vai em todos os itens de `jogadores`.
 4. **Carta coberta** vai como `"carta": null` e `"coberta": true`, para todos os jogadores, inclusive quem jogou, e em todas as rodadas da lista (não só na última). A tela decide pelo `coberta`. Se o código da carta for junto, ela mostra o verso do mesmo jeito, mas a carta fica visível nas ferramentas do navegador (P5).
 5. Nada além do que está nas tabelas da seção 4.1 precisa sair do servidor (baralho, `usuario_id`, `sala_id`). Campos a mais são ignorados pela tela.
-6. Na mão de onze, o contrato manda enviar também a mão do parceiro ao time com 11 pontos. A tela ainda não mostra essas cartas (P6).
+6. Na mão de onze (`"tipo": "mao_de_onze"`), no 2x2, cada jogador do time com 11 pontos recebe também a `mao` no item do parceiro, com o `qtd_cartas` junto, como em todos os itens. A tela mostra essas cartas abertas junto ao parceiro. O time adversário continua recebendo só `qtd_cartas`.
 
 O exemplo 7.2 tem uma função `visao_do_jogador` que aplica as regras 1 a 4.
 
@@ -273,23 +284,28 @@ Lembrando: isso só define o que fica clicável. O servidor valida tudo de novo.
 |---|---|
 | Cartas da mão | `vez_assento` é igual a `meu_assento`, `truco_pendente` é `null` e `aguardando_decisao_mao_de_onze` não é `true` |
 | Botão de truco ("Truco", "Seis", "Nove" ou "Doze") | É a vez do jogador, `truco_pendente` é `null`, `valor` é menor que 12, `ultimo_aumento_time` não é o time dele e `tipo` é `"normal"` |
-| "Aceitar" e "Correr" | Existe `truco_pendente` e `pedido_por_time` não é o time do jogador |
+| "Aceitar" e "Correr" | Existe `truco_pendente` e `pedido_por_time` não é o time do jogador. No 2x2, vale para os dois jogadores do time |
 | "Aumentar" | O mesmo de "Aceitar", e `valor_proposto` menor que 12 |
-| Caixa "Jogar coberta" | `rodadas` tem 2 itens ou mais |
-| "Jogar a mão" e "Correr" da mão de onze | Só aparecem quando `aguardando_decisao_mao_de_onze` é `true` e o time do jogador tem exatamente 11 em `placar` |
-| Chat | Sempre |
+| Caixa "Jogar coberta" | A próxima carta é da segunda rodada em diante (seção 4.1) |
+| "Jogar a mão" e "Correr" da mão de onze | Só aparecem quando `aguardando_decisao_mao_de_onze` é `true` e o time do jogador tem exatamente 11 em `placar`. No 2x2, para os dois parceiros |
+| Chat | Com a conexão aberta, inclusive depois do fim da partida |
+
+Além disso, com a conexão caída ou com `"status": "encerrada"`, todos os controles de jogo ficam desabilitados.
 
 A barra de ações também mostra uma frase que depende do estado. Ela ajuda a conferir se o servidor mandou o que você esperava:
 
 | Situação no estado | Frase mostrada |
 |---|---|
+| Conexão caída, tentando de novo | "Conexão perdida. Reconectando…" |
+| Mensagem `erro` recebida nos últimos 4 segundos | A `mensagem` do erro |
+| `"status": "encerrada"` | "Fim de partida." |
 | Truco pendente pedido pelo outro time | "Time adversário pediu Seis!" |
 | Truco pendente pedido pelo time do jogador | "Aguardando o adversário responder ao pedido de Seis…" |
 | Decisão de mão de onze pendente, time do jogador com 11 | "Mão de onze: seu time decide se joga ou corre." |
 | Decisão de mão de onze pendente, time adversário com 11 | "Aguardando o adversário decidir a mão de onze…" |
 | Vez do jogador | "Sua vez de jogar." |
 | Vez de outro jogador | "Vez de João." |
-| `vez_assento` é `null` | (nenhuma frase) |
+| `vez_assento` é `null` | "Fim da mão." |
 
 ### 4.5 Exemplo completo
 
@@ -300,6 +316,7 @@ Partida 2x2 na segunda rodada, enviada ao jogador do assento 0. A primeira rodad
   "tipo": "estado",
   "partida_id": "p1",
   "formato": "2x2",
+  "status": "em_andamento",
   "meu_assento": 0,
   "jogadores": [
     {"assento": 0, "nome": "Ian", "time": "A", "bot": false, "mao": ["3P", "KC"], "qtd_cartas": 2},
@@ -370,7 +387,7 @@ A mesma situação enviada ao João (assento 3) muda só em `meu_assento` e em q
 
 Todas são objetos JSON com o campo `tipo`. Nenhuma leva o nome nem o assento do jogador: o servidor sabe quem enviou pela conexão.
 
-Hoje a função `enviar` só escreve a mensagem no console do navegador, no formato `[enviar] {...}`. Quando a tela for ligada ao WebSocket, cada mensagem irá como um texto JSON (P1).
+A função `enviar` manda cada mensagem pela conexão, como um texto JSON. Com a conexão caída, os controles ficam desabilitados e nada é enviado. Só nos estados falsos da tela (`mesa.html` sem `?partida=`), que não têm conexão, ela escreve a mensagem no console do navegador, no formato `[enviar] {...}`.
 
 | `tipo` | Campos | A tela envia quando |
 |---|---|---|
@@ -389,16 +406,16 @@ As condições que deixam cada controle clicável estão na seção 4.4.
 ```
 
 - `carta`: código de uma das cartas da `mao` do jogador.
-- `coberta`: sempre presente. Só vai `true` quando a caixa "Jogar coberta" está marcada e `rodadas` tem 2 itens ou mais.
+- `coberta`: sempre presente. Só vai `true` quando a caixa "Jogar coberta" está marcada e a carta é da segunda rodada em diante.
 
 O que o servidor faz:
 
 1. Confere que é a vez do jogador, que não há truco nem decisão de mão de onze pendente, que a carta está na mão dele e que `coberta` só vem `true` a partir da segunda rodada.
-2. Tira a carta da mão, acrescenta a jogada ao final de `jogadas` da rodada atual e passa `vez_assento` para o próximo.
-3. Se a rodada terminou, preenche `vencedor_time` (seção 6.4).
+2. Tira a carta da mão e acrescenta a jogada ao final de `jogadas` da rodada atual. Se a lista está vazia ou a última rodada já tem vencedor, cria antes a rodada nova, com esta carta como a primeira jogada. Depois passa `vez_assento` para o próximo.
+3. Se a rodada terminou, preenche `vencedor_time` e passa `vez_assento` para quem abre a próxima, ou encerra a mão (seção 6.4).
 4. Envia o novo `estado` a todos.
 
-Um clique duplo pode gerar duas mensagens seguidas. A segunda deve ser recusada como qualquer jogada fora da vez.
+Um clique duplo pode gerar duas mensagens seguidas. A segunda deve ser recusada como qualquer jogada fora da vez (`fora_da_vez`).
 
 ### 5.2 `pedir_truco`
 
@@ -424,7 +441,7 @@ Não é preciso mexer em `vez_assento`. Com `truco_pendente` preenchido, a tela 
 
 - `resposta`: `"aceitar"`, `"correr"` ou `"aumentar"`.
 
-No 2x2, os **dois** jogadores do time desafiado veem os botões habilitados. Podem chegar duas respostas para o mesmo pedido (P11).
+No 2x2, os **dois** jogadores do time desafiado veem os botões habilitados, e qualquer um deles pode responder. Vale a primeira resposta que chegar: a segunda já não encontra pedido pendente e recebe `erro` com `acao_invalida`.
 
 O que o servidor faz:
 
@@ -445,7 +462,7 @@ O momento exato em que `valor` e `ultimo_aumento_time` mudam é regra do motor e
 
 - `jogar`: `true` no botão "Jogar a mão", `false` no botão "Correr".
 
-Enquanto `aguardando_decisao_mao_de_onze` é `true`, a tela bloqueia as cartas de todos os jogadores. No 2x2, os dois parceiros do time com 11 pontos veem os botões (P11).
+Enquanto `aguardando_decisao_mao_de_onze` é `true`, a tela bloqueia as cartas de todos os jogadores. No 2x2, os dois parceiros do time com 11 pontos veem os botões, e vale a primeira decisão, como no truco.
 
 O que o servidor faz:
 
@@ -459,13 +476,13 @@ O que o servidor faz:
 {"tipo": "chat", "texto": "boa, parceira"}
 ```
 
-- `texto`: o que o jogador digitou, sem espaços no começo e no fim. A tela não envia texto vazio e o campo aceita até 200 caracteres, mas esses limites só existem no navegador.
+- `texto`: o que o jogador digitou, sem espaços no começo e no fim. A tela não envia texto vazio e o campo aceita até 200 caracteres. O servidor confere de novo.
 
 O que o servidor faz:
 
-1. Confere que `texto` é um texto não vazio e limita o tamanho.
-2. Acrescenta `{"de": "<nome do jogador>", "texto": "..."}` ao final de `chat`.
-3. Envia o novo `estado` a todos, inclusive a quem escreveu. A tela não mostra a própria mensagem até recebê-la de volta (P7).
+1. Confere que `texto` é um texto não vazio e corta em 200 caracteres.
+2. Acrescenta `{"de": "<nome do jogador>", "texto": "..."}` ao final de `chat` e guarda só as 50 últimas mensagens.
+3. Envia o novo `estado` a todos, inclusive a quem escreveu. A tela só mostra a própria mensagem quando ela volta no `estado`.
 
 ## 6. Comportamentos esperados
 
@@ -477,36 +494,41 @@ O que o servidor faz:
 ### 6.2 Ações inválidas
 
 - Não alterar o estado e não avisar os outros jogadores.
-- Responder só a quem enviou, com a mensagem `erro` do contrato. Os códigos ainda não foram definidos (P15):
+- Responder só a quem enviou, com a mensagem `erro`:
 
 ```json
 {"tipo": "erro", "codigo": "fora_da_vez", "mensagem": "Não é a sua vez."}
 ```
 
-- Não fechar a conexão por causa de uma jogada inválida.
-- Tratar do mesmo jeito as mensagens malformadas: texto que não é JSON, objeto sem `tipo`, `tipo` desconhecido, campo faltando. O servidor nunca pode cair por causa de uma mensagem.
+- Usar um destes códigos. A divisão entre eles é a do servidor simulado da tela (`frontend/js/mock/servidor-game.js`):
 
-A tela ainda não mostra erros (P15). Como ela só muda quando chega um `estado`, uma ação recusada simplesmente não tem efeito visível. Se quiser garantir que a tela de quem errou está em dia, reenvie o `estado` só para ele.
+| `codigo` | Quando | Exemplo de `mensagem` |
+|---|---|---|
+| `fora_da_vez` | Jogar uma carta ou pedir truco fora da vez | "Não é a sua vez." |
+| `carta_invalida` | Carta que não está na mão do jogador, ou coberta na primeira rodada | "Você não tem essa carta." |
+| `nao_autorizado` | Ação que este jogador não pode fazer: responder ao truco do próprio time, decidir a mão de onze sem ser do time com 11 | "Quem responde ao truco é o time adversário." |
+| `acao_invalida` | Ação que não cabe agora (nenhum pedido para responder, truco bloqueado, mão de onze já decidida, pausa entre as mãos, partida encerrada) ou mensagem malformada | "Não há pedido de truco para responder." |
+
+- Não fechar a conexão por causa de uma jogada inválida.
+- Tratar do mesmo jeito, com `acao_invalida`, as mensagens malformadas: texto que não é JSON, objeto sem `tipo`, `tipo` desconhecido, campo faltando. O servidor nunca pode cair por causa de uma mensagem.
+
+A tela mostra a `mensagem` por 4 segundos na barra de ações, no lugar da frase de situação, sem bloquear a mesa. Escreva para o jogador: em português, curta, sem nomes internos. O `codigo` a tela não lê. Como ela só muda quando chega um `estado`, a ação recusada não tem nenhum outro efeito na tela.
 
 ### 6.3 Chat
 
 - O chat volta para a tela dentro da lista `chat` do `estado`. A tela redesenha a lista inteira e rola até a última mensagem.
-- O contrato também prevê uma mensagem `chat` separada, do servidor para o cliente. A tela não a usa (P7).
-- A lista inteira viaja em todo `estado`. Vale limitar o histórico, por exemplo às 50 últimas mensagens (P14).
+- Não existe mensagem `chat` separada, do servidor para o cliente: tudo vem no `estado`.
+- A lista leva só as 50 últimas mensagens, cada uma com até 200 caracteres.
 
 ### 6.4 Fim de rodada, de mão e de partida
 
-A tela não tem animação nem pausa própria. Ela mostra o último `estado` recebido e, no centro, só a última rodada da lista.
+A tela não tem animação nem pausa própria. Ela mostra o último `estado` recebido e, no centro, só a última rodada da lista. Por isso a ordem e o ritmo dos estados ficam com o servidor:
 
-Para os jogadores verem a rodada completa antes de a mesa ser limpa, uma opção que funciona com a tela de hoje, sem mudar o frontend, é:
+1. **Fim de rodada.** O estado sai com a rodada completa, `vencedor_time` preenchido e `vez_assento` em quem abre a próxima. A rodada nova **não** entra em `rodadas` agora: ela só é criada quando a primeira carta dela for jogada (seção 5.1). Assim a rodada encerrada continua na mesa até alguém abrir a seguinte, sem pausa nenhuma.
+2. **Fim de mão.** O estado sai com a última rodada completa, o `placar` atualizado e `"vez_assento": null` (a tela mostra "Fim da mão."). O servidor espera uns 2 segundos e só então envia a mão nova: `numero`, `pe`, `vira`, cartas, `valor` inicial e `"rodadas": []`. Use `await asyncio.sleep(2)`. Nunca use `time.sleep`, que trava o servidor inteiro, para todas as partidas. Durante a pausa o chat continua funcionando, e as outras ações recebem `erro`.
+3. **Fim de partida.** Quando um time chega a 12, o estado sai na hora com `"status": "encerrada"`, `vencedor_time` e a última mão em `mao_atual`, com `"vez_assento": null`. Não há mão nova. A tela mostra sobre a mesa o resultado, o placar final e o botão "Voltar ao lobby". Daí em diante só o chat vale, e quem conectar recebe o mesmo estado encerrado.
 
-1. Enviar o estado com a rodada completa, `vencedor_time` preenchido e `"vez_assento": null`.
-2. Esperar um instante, algo como 1,5 segundo. Use `await asyncio.sleep(1.5)`. Nunca use `time.sleep`, que trava o servidor inteiro, para todas as partidas.
-3. Enviar o estado seguinte: a nova rodada em `rodadas` com `"jogadas": []` e `vez_assento` preenchido, ou a nova mão.
-
-O mesmo vale para o fim da mão, para o placar atualizado aparecer antes de as cartas serem distribuídas de novo. Durante a pausa o chat deve continuar funcionando. Isso é uma sugestão: a outra saída é o frontend cuidar da pausa usando as mensagens `rodada_encerrada` e `mao_encerrada` (P10).
-
-O contrato prevê as mensagens `truco_pedido`, `rodada_encerrada`, `mao_encerrada` e `partida_encerrada`, "para animações e avisos". A tela ainda não trata nenhuma delas (P16). Também não existe tela de fim de partida (P9).
+Não existem mensagens próprias para esses momentos. As que o documento de contratos previa "para animações e avisos" (`truco_pedido`, `rodada_encerrada`, `mao_encerrada` e `partida_encerrada`) deixaram de existir: tudo vem no `estado`.
 
 ### 6.5 Mensagens ao mesmo tempo
 
@@ -516,7 +538,8 @@ O contrato prevê as mensagens `truco_pedido`, `rodada_encerrada`, `mao_encerrad
 ### 6.6 Queda de conexão
 
 - Quando a conexão cai, tire-a da lista e mantenha o estado da partida.
-- Se o mesmo jogador conectar de novo (um F5 na página já causa isso), envie o `estado` atual. A tela se redesenha inteira a partir dele (P8).
+- A tela tenta conectar de novo sozinha, esperando 1, 2, 4 e 8 segundos entre as tentativas e, daí em diante, 10 segundos. Enquanto isso, a mesa continua na tela com "Conexão perdida. Reconectando…". Depois de 4401, 4403 ou 4404 ela não tenta de novo (seção 3.4).
+- Quando o mesmo jogador conectar de novo (um F5 na página também é uma volta), envie o `estado` atual, como em qualquer conexão. A tela se redesenha inteira a partir dele.
 - Se o mesmo jogador aparecer com duas conexões ao mesmo tempo, por exemplo em duas abas, é preciso decidir qual delas vale (P19).
 - O que acontece com a partida enquanto um jogador está fora ainda não foi decidido (P20).
 
@@ -526,7 +549,7 @@ Os bots conectam no mesmo endereço, recebem o mesmo tipo de `estado` (na visão
 
 ## 7. Exemplo mínimo em FastAPI
 
-Os dois exemplos abaixo foram testados com Python 3.14, FastAPI 0.143 e Uvicorn 0.54, e o estado enviado por eles foi desenhado pela tela real.
+Os dois exemplos abaixo foram testados com Python 3.14, FastAPI 0.143 e Uvicorn 0.54, e o estado enviado por eles foi desenhado pela tela real. Depois das decisões de 20/10/2026 eles foram atualizados e testados de novo, com FastAPI 0.153: o 7.2 com a tela conectada a ele (seção 8.3), e o 7.1 por um cliente WebSocket.
 
 Para rodar, salve o código como `main.py` numa pasta de testes e execute, dentro dela:
 
@@ -558,6 +581,7 @@ ESTADO_FIXO = {
     "tipo": "estado",
     "partida_id": "p1",
     "formato": "1x1",
+    "status": "em_andamento",
     "meu_assento": 0,
     "jogadores": [
         {"assento": 0, "nome": "Ian", "time": "A", "bot": False, "mao": ["3P", "KC", "6O"], "qtd_cartas": 3},
@@ -573,7 +597,7 @@ ESTADO_FIXO = {
         "truco_pendente": None,
         "ultimo_aumento_time": None,
         "aguardando_decisao_mao_de_onze": False,
-        "rodadas": [{"jogadas": [], "vencedor_time": None}],
+        "rodadas": [],  # a rodada só entra na lista com a primeira carta dela
         "vez_assento": 0,
     },
     "chat": [],
@@ -599,9 +623,9 @@ async def mesa(websocket: WebSocket, partida_id: str, token: str = ""):
             try:
                 mensagem = json.loads(texto)
             except json.JSONDecodeError:
-                # Mensagem de erro no formato do contrato (a tela ainda não mostra erros).
+                # Mensagem de erro do protocolo: a tela mostra a "mensagem" na barra de ações.
                 await websocket.send_json(
-                    {"tipo": "erro", "codigo": "json_invalido", "mensagem": "A mensagem não é um JSON válido."}
+                    {"tipo": "erro", "codigo": "acao_invalida", "mensagem": "A mensagem não é um JSON válido."}
                 )
                 continue
             print("recebido:", mensagem)
@@ -638,6 +662,7 @@ PARTIDAS = {
     "p1": {
         "partida_id": "p1",
         "formato": "1x1",
+        "status": "em_andamento",
         "jogadores": [
             {"assento": 0, "nome": "Ian", "time": "A", "bot": False, "mao": ["3P", "KC", "6O"]},
             {"assento": 1, "nome": "Ana", "time": "B", "bot": False, "mao": ["2E", "7C", "QP"]},
@@ -652,7 +677,7 @@ PARTIDAS = {
             "truco_pendente": None,
             "ultimo_aumento_time": None,
             "aguardando_decisao_mao_de_onze": False,
-            "rodadas": [{"jogadas": [], "vencedor_time": None}],
+            "rodadas": [],
             "vez_assento": 0,
         },
         "chat": [],
@@ -693,9 +718,12 @@ async def enviar_estado_a_todos(partida_id: str) -> None:
 async def mesa(websocket: WebSocket, partida_id: str, assento: int = 0):
     await websocket.accept()
     estado = PARTIDAS.get(partida_id)
-    if estado is None or assento not in [j["assento"] for j in estado["jogadores"]]:
-        # Aceita e fecha com um código próprio, para o cliente saber o motivo.
-        await websocket.close(code=4404, reason="partida ou assento inexistente")
+    # Aceita e fecha com o código do protocolo, para a tela saber o motivo (seção 3.4).
+    if estado is None:
+        await websocket.close(code=4404, reason="partida inexistente")
+        return
+    if assento not in [j["assento"] for j in estado["jogadores"]]:
+        await websocket.close(code=4403, reason="não pertence à partida")
         return
 
     # Guarda a conexão deste assento e envia o estado na visão dele.
@@ -708,7 +736,7 @@ async def mesa(websocket: WebSocket, partida_id: str, assento: int = 0):
                 mensagem = json.loads(await websocket.receive_text())
             except json.JSONDecodeError:
                 await websocket.send_json(
-                    {"tipo": "erro", "codigo": "json_invalido", "mensagem": "A mensagem não é um JSON válido."}
+                    {"tipo": "erro", "codigo": "acao_invalida", "mensagem": "A mensagem não é um JSON válido."}
                 )
                 continue
             print(f"assento {assento} enviou:", mensagem)
@@ -782,7 +810,25 @@ A página `/docs` do FastAPI não lista rotas WebSocket. Isso é normal.
 
 ### 8.3 Ver o estado do seu servidor desenhado na tela de verdade
 
-Dá para usar a tela real como visualizador, sem alterar nenhum arquivo do frontend:
+**Com a tela conectada ao seu servidor.** A mesa conecta sozinha em `ws://<endereço da página>/ws/partidas/<partida_id>?token=<token do login>`. Por isso a página e o Game precisam estar no mesmo endereço, como vão estar atrás do gateway. Enquanto não há Nginx, o próprio Game pode entregar os arquivos da tela:
+
+1. Acrescente ao fim do `main.py` (do exemplo 7.1 ou do 7.2), depois da rota do WebSocket:
+
+```python
+# SÓ PARA TESTE LOCAL, enquanto não há Nginx: o próprio Game entrega os arquivos da tela,
+# para a página e o WebSocket ficarem no mesmo endereço. Fica depois da rota /ws/partidas,
+# para não responder no lugar dela.
+from fastapi.staticfiles import StaticFiles
+
+app.mount("/", StaticFiles(directory="caminho/para/o/repositorio/frontend", html=True), name="tela")
+```
+
+2. Em `frontend/js/ws.js`, troque `USAR_MOCK_GAME` para `false`. Não faça commit dessa troca antes de o Game estar no ar para toda a equipe.
+3. Suba o servidor (`uvicorn main:app --reload --port 8001`), abra `http://localhost:8001/index.html` e entre. O login pode continuar no mock: os exemplos da seção 7 não conferem o token.
+4. Abra `http://localhost:8001/mesa.html?partida=p1`. A mesa desenha o `estado` do servidor, e os cliques saem pela conexão. Com o exemplo 7.2, o chat vai e volta; as outras mensagens só aparecem no terminal do servidor. O assento, nesse exemplo, vem de `?assento=` na URL do WebSocket, que a tela não manda: pela tela você é sempre o assento 0.
+5. Para ver a reconexão, pare o servidor e suba de novo: a mesa mostra "Conexão perdida. Reconectando…" e volta sozinha. Com `?partida=` de uma partida que não existe, o exemplo 7.2 fecha com 4404, e a tela mostra "Esta partida não existe." e volta para o lobby.
+
+**Sem mexer em nenhum arquivo.** A mesa aberta sem `?partida=` não conecta (mostra os estados falsos), e dá para usá-la como visualizador pelo console:
 
 1. Sirva o frontend: dentro de `frontend/`, rode `python -m http.server 8000`.
 2. Abra `http://localhost:8000/mesa.html`.
@@ -800,7 +846,7 @@ ws.onmessage = (e) => {
 
 A tela passa a desenhar o que o seu servidor mandar. Algumas observações:
 
-- Os cliques continuam só escrevendo `[enviar] {...}` no console, porque a tela ainda não envia pelo WebSocket (P1). Para mandar a mesma mensagem ao servidor, use `ws.send(JSON.stringify({...}))`.
+- Os cliques só escrevem `[enviar] {...}` no console, porque a página aberta assim não tem conexão. Para mandar a mesma mensagem ao servidor, use `ws.send(JSON.stringify({...}))`.
 - Se a tela não mudar depois de um `estado`, olhe o console: um erro em vermelho indica campo obrigatório faltando (seção 4.1).
 - Não use o seletor de mock no canto da mesa durante o teste. Ele redesenha a tela com um estado falso.
 - Se o servidor reiniciar, a conexão cai. Recarregue a página e cole o trecho de novo.
@@ -816,39 +862,44 @@ A tela passa a desenhar o que o seu servidor mandar. Algumas observações:
 | Cartas aparecem como imagem quebrada | Código de carta fora do padrão (seção 4.2) |
 | Os botões da mão de onze não aparecem | `aguardando_decisao_mao_de_onze` ausente, ou `placar` enviado como texto em vez de número |
 | O placar mostra "undefined" | `time` diferente de `"A"` e `"B"`, ou chave faltando em `placar` |
+| A mesa fica em "Conectando à partida…" | O servidor aceitou a conexão, mas não enviou o `estado` (seção 3.3), ou ele veio sem `"tipo": "estado"` |
+| A mesa fica em "Não foi possível conectar. Tentando de novo…" | Servidor parado, endereço diferente do da página (seção 8.3) ou recusa sem `accept()` (seção 3.4) |
+| A mesa mostra "Esta partida não existe." e volta para o lobby | Fechamento 4404: o `partida_id` da URL não existe no servidor |
+| A mesa volta para o login logo ao abrir | Fechamento 4401: o token foi recusado |
+| A rodada encerrada some da mesa antes de alguém jogar | O servidor criou a rodada nova antes da primeira carta dela (seção 6.4) |
 
 ## 9. Pontos em aberto
 
 ### Diferenças entre a tela e o documento de contratos
 
-- **P1. A tela ainda não se conecta.** Não há código de WebSocket no frontend: `enviar` só escreve no console, o estado vem dos mocks e `mesa.html` não recebe `partida_id` nem token. Falta o frontend abrir a conexão, chamar `renderizarMesa` a cada `estado` e enviar as mensagens como JSON. Para o servidor, basta cumprir o endereço do contrato.
-- **P2. Campo `tipo` na mensagem `estado`.** O contrato diz que toda mensagem tem `tipo`, mas os mocks da tela são o estado puro, sem `tipo`. Este guia assume os campos do estado no primeiro nível, junto com `"tipo": "estado"`. A tela desenha normalmente com esse campo a mais. Confirmar esse formato, em vez de algo como `{"tipo": "estado", "estado": {...}}`.
-- **P3. `meu_assento`.** A tela não funciona sem ele, e ele não aparece no documento de contratos, que só mostra o estado guardado no servidor. Incluir no contrato como campo da visão de cada jogador.
-- **P4. `aguardando_decisao_mao_de_onze`.** A tela depende dele para mostrar os botões "Jogar a mão" e "Correr" e para bloquear as cartas. O contrato não tem esse campo em `mao_atual`. Incluir no contrato ou combinar outra forma de indicar que a decisão está pendente.
-- **P5. Carta coberta.** O contrato diz que as cartas cobertas "aparecem como `"coberta"` sem o valor". A tela espera `"carta": null` com `"coberta": true`. Se o servidor mandar `"carta": "coberta"` sem `"coberta": true`, a tela mostra uma imagem quebrada. Fixar no contrato a forma `null` com `true`.
-- **P6. Mão do parceiro na mão de onze.** Pelo contrato, o time com 11 pontos recebe também a mão do parceiro. A tela ignora `mao` nos outros jogadores e continua mostrando versos. Falta o frontend exibir essas cartas. Até lá, enviar `qtd_cartas` em todos os jogadores, mesmo quando `mao` for junto.
-- **P7. Chat.** O contrato tem uma mensagem `chat` do servidor para o cliente ("mensagem de outro jogador") e também a lista `chat` dentro do estado. A tela só usa a lista do estado e não mostra a própria mensagem ao enviar. Decidir: ou cada mensagem de chat gera um novo `estado` para todos, o que funciona com a tela de hoje, ou o frontend passa a tratar a mensagem `chat`.
-- **P8. Reconexão.** O contrato deixa "reconexão a partida em andamento" fora do escopo, mas um F5 na mesa já é uma reconexão. Como a tela se redesenha inteira a partir de qualquer `estado`, basta o servidor aceitar a nova conexão do mesmo jogador e enviar o estado atual. Decidir se isso entra.
+- **P1. A tela ainda não se conecta. Resolvido.** A mesa abre como `mesa.html?partida={partida_id}` e conecta pelo `frontend/js/ws.js`, com o token do login. Ela chama `renderizarMesa` a cada `estado` e envia as mensagens como JSON. Hoje a conexão vai para o servidor simulado; com `USAR_MOCK_GAME = false`, para o Game (seção 8.3).
+- **P2. Campo `tipo` na mensagem `estado`. Resolvido.** Os campos do estado vão no primeiro nível, junto com `"tipo": "estado"`.
+- **P3. `meu_assento`. Resolvido.** Faz parte do protocolo: o `estado` enviado a cada jogador traz `meu_assento`, acrescentado na visão dele. Não existe no estado guardado no servidor (seção 4.1).
+- **P4. `aguardando_decisao_mao_de_onze`. Resolvido.** Faz parte do protocolo: `mao_atual` traz o campo, `true` enquanto o time com 11 não decide. A tela o usa para mostrar os botões "Jogar a mão" e "Correr" e para bloquear as cartas (seção 4.1).
+- **P5. Carta coberta. Resolvido.** Faz parte do protocolo: a carta jogada coberta vem como `{"carta": null, "coberta": true}`, para todos os jogadores. A forma `"carta": "coberta"`, citada no documento de contratos, não vale: sem `"coberta": true`, a tela mostraria uma imagem quebrada (seção 4.3).
+- **P6. Mão do parceiro na mão de onze. Resolvido.** No 2x2, o time com 11 pontos recebe a `mao` também no item do parceiro, com o `qtd_cartas` junto, e a tela mostra essas cartas abertas e menores junto ao parceiro (seção 4.3).
+- **P7. Chat. Resolvido.** Não existe mensagem `chat` separada: cada mensagem entra na lista `chat` do `estado`, que volta para todos com as 50 últimas (seção 6.3).
+- **P8. Reconexão. Resolvido.** Ao conectar, o servidor sempre envia o estado atual, e isso vale como reconexão, inclusive depois de um F5. A tela reconecta sozinha quando a conexão cai (seção 6.6).
 
 ### O que o código da tela assume sem estar escrito
 
-- **P9. Não existe tela de espera nem de fim de partida.** Todo `estado` precisa trazer 2 ou 4 jogadores e uma `mao_atual` preenchida; com menos que isso a tela quebra. Decidir quando a primeira mão é distribuída (na criação da partida ou quando todos conectarem), o que o servidor envia depois que um time chega a 12 e o que a tela mostra nesse momento. O estado guardado tem um campo `status`, que a tela não lê.
-- **P10. Rodadas e pausas.** A tela trata o último item de `rodadas` como a rodada atual e só desenha esse item. Por isso o item da nova rodada tem que existir antes da primeira carta dela, e alguém precisa manter a rodada fechada na tela por um instante (seção 6.4). Decidir se a pausa fica no servidor, com um estado intermediário e `"vez_assento": null`, que a tela já aceita, ou no frontend, usando `rodada_encerrada` e `mao_encerrada`.
-- **P11. Quem responde pelo time no 2x2.** Com truco pendente, os dois jogadores do time desafiado veem "Aceitar", "Correr" e "Aumentar" habilitados. Na mão de onze, os dois parceiros veem "Jogar a mão" e "Correr". A tela não sabe quem deve responder. Decidir a regra (vale a primeira resposta? só um deles pode?) e o que fazer com a segunda resposta que chegar.
+- **P9. Não existe tela de espera nem de fim de partida. Resolvido.** A tela mostra "Conectando à partida…" até o primeiro `estado` e a tela de fim de partida quando `status` é `"encerrada"`, com `vencedor_time` (seções 3.3 e 6.4). Como todo `estado` continua precisando de `mao_atual`, a partida já nasce com a primeira mão distribuída.
+- **P10. Rodadas e pausas. Resolvido.** A rodada nova só é criada com a primeira carta dela, então a rodada encerrada continua na mesa sem pausa nenhuma, e a tela calcula a rodada da próxima carta sozinha. No fim de cada mão o servidor espera uns 2 segundos antes de mandar a próxima (seção 6.4).
+- **P11. Quem responde pelo time no 2x2. Resolvido.** Qualquer jogador do time pode responder ao truco ou decidir a mão de onze, e vale a primeira resposta. A segunda recebe `erro` (seções 5.3 e 5.4).
 - **P12. `valor` e `ultimo_aumento_time`.** A tela mostra `valor` como "Valendo N", usa `valor` para o texto do botão de truco e usa `ultimo_aumento_time` para bloquear o botão. Confirmar com o motor de regras em que momento cada um muda (no pedido, no aceite, no aumento) e qual `valor` aparece durante a decisão da mão de onze. Sugestão coerente com a tela: `valor` é quanto a mão vale agora, isto é, o que o adversário ganha se alguém correr.
-- **P13. Mão de ferro.** A tela só mostra o selo "Mão de ferro" e desabilita o truco. Se a regra adotada for jogar sem ver as próprias cartas, a tela não dá suporte: `mao` precisa ter códigos válidos (um `null` na lista quebra a tela) e `jogar_carta` leva o código da carta. `vira` também é sempre obrigatória. Definir a regra e o que o servidor envia nesse tipo de mão.
-- **P14. Limites de nome e de chat.** A cor do autor no chat é escolhida comparando `de` com o `nome` dos jogadores, então nomes repetidos se confundem. A tela não corta nomes longos. A lista `chat` inteira viaja em todo `estado`. O limite de 200 caracteres por mensagem só existe no navegador. Decidir o tamanho máximo do nome, do texto e do histórico.
+- **P13. Mão de ferro.** A tela só mostra o selo "Mão de ferro" e desabilita o truco. Se a regra adotada for jogar sem ver as próprias cartas, a tela não dá suporte: `mao` precisa ter códigos válidos (um `null` na lista quebra a tela) e `jogar_carta` leva o código da carta. `vira` também é sempre obrigatória. Definir a regra e o que o servidor envia nesse tipo de mão. O servidor simulado da tela também deixa a regra de fora: com 11 a 11, ele só marca o tipo e não deixa pedir truco.
+- **P14. Limites de nome e de chat. Em parte resolvido.** O chat ficou em 50 mensagens no histórico e 200 caracteres por mensagem, conferidos também no servidor (seção 5.5). Continua em aberto o nome: a cor do autor no chat é escolhida comparando `de` com o `nome` dos jogadores, então nomes repetidos se confundem, e a tela não corta nomes longos. Decidir o tamanho máximo do nome.
 
-### Mensagens do contrato que a tela ainda não trata
+### Mensagens do contrato
 
-- **P15. `erro`.** O contrato define os campos `codigo` e `mensagem`, mas não lista os códigos. A tela ainda não mostra erros: a ação recusada simplesmente não tem efeito. Definir a lista de códigos, por exemplo `fora_da_vez`, `carta_invalida`, `acao_invalida` e `json_invalido`.
-- **P16. `truco_pedido`, `rodada_encerrada`, `mao_encerrada` e `partida_encerrada`.** Nenhuma é tratada pela tela. Pelo contrato, servem para animações e avisos. Falta definir os campos exatos (por exemplo, como `rodada_encerrada` representa um empate) e a ordem em relação ao `estado` (antes ou depois dele).
+- **P15. `erro`. Resolvido.** Os códigos são `fora_da_vez`, `carta_invalida`, `acao_invalida` e `nao_autorizado` (seção 6.2), e a tela mostra a `mensagem` por alguns segundos na barra de ações.
+- **P16. `truco_pedido`, `rodada_encerrada`, `mao_encerrada` e `partida_encerrada`. Resolvido.** Essas mensagens deixaram de existir. O servidor só manda `estado` e `erro`, e o fim da partida vem no `status` do `estado` (seção 6.4).
 
 ### Decisões do backend
 
 - **P17. Token e assento.** O contrato diz que o token vai em `?token=<jwt>` e que cada serviço valida o JWT sozinho. Não diz quais dados vêm dentro dele (qual campo identifica o usuário) nem como o bot, que usa um "token de serviço", informa em que assento está.
-- **P18. Códigos de fechamento.** Não há códigos combinados para recusar uma conexão: token inválido, partida inexistente, usuário fora da partida. A tela ainda não trata o fechamento da conexão.
+- **P18. Códigos de fechamento. Resolvido.** 4401 para token inválido, 4403 para usuário fora da partida e 4404 para partida inexistente, sempre com `accept()` antes do `close()` (seção 3.4).
 - **P19. Duas conexões do mesmo jogador.** Decidir o que acontece se o mesmo usuário abrir a mesa em duas abas: a nova substitui a antiga, a nova é recusada ou as duas recebem o estado.
-- **P20. Jogador que cai no meio da partida.** Decidir se a partida espera, se um bot assume ou se o time perde. A tela não tem indicador de jogador desconectado nem relógio de tempo de jogada.
+- **P20. Jogador que cai no meio da partida.** Decidir se a partida espera, se um bot assume ou se o time perde. A tela não tem indicador de jogador desconectado nem relógio de tempo de jogada. O botão "Sair da partida" da tela só fecha a conexão e volta ao lobby: para o servidor, é igual a uma queda.
 - **P21. Um processo ou vários.** Se as conexões ficarem na memória do processo, como no exemplo 7.2, o Game precisa rodar com um único processo. Com mais de um, é preciso distribuir os avisos entre eles, por exemplo com o pub/sub do Redis.
 - **P22. Caminho no Nginx.** Confirmar que o gateway repassa `/ws/partidas/...` ao Game sem alterar o caminho, como os exemplos deste guia assumem.
