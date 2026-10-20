@@ -142,7 +142,7 @@ Para recusar, use sempre a segunda forma, com um destes códigos:
 | 4404 | Não existe partida com esse `partida_id` | Mostra "Esta partida não existe." e volta para o lobby em 5 segundos |
 | Qualquer outro, inclusive o 1006 | Queda | Tenta conectar de novo, sozinha (seção 6.6) |
 
-Uma recusa sem `accept()` chega à tela como queda (1006): ela não sai da partida e fica tentando de novo para sempre. Um caminho errado na URL também aparece como 403 e 1006. Se a conexão "falha sem motivo", confira primeiro o caminho.
+**O servidor precisa chamar `accept()` antes de fechar com 4401, 4403 ou 4404.** Uma recusa sem `accept()` chega à tela como queda (1006): ela não sai da partida e fica tentando reconectar indefinidamente. Um caminho errado na URL também aparece como 403 e 1006. Se a conexão "falha sem motivo", confira primeiro o caminho.
 
 ### 3.5 Atrás do Docker e do Nginx
 
@@ -178,7 +178,7 @@ Como ler a coluna **Obrigatório**: *Sim* quer dizer que, sem o campo, a tela qu
 | `tipo` | texto | **Sim** | Sempre `"estado"`. É ele que separa o `estado` da mensagem `erro`: sem ele, a tela ignora a mensagem. |
 | `status` | texto | **Sim** | `"em_andamento"` ou `"encerrada"`. Com `"encerrada"`, a tela mostra o fim de partida sobre a mesa e desabilita os controles de jogo; o chat continua. Ausente, a tela trata como `"em_andamento"`. |
 | `vencedor_time` | texto | Só com `"encerrada"` | `"A"` ou `"B"`. A tela compara com o time do jogador e escreve "Você venceu!" ou "Você perdeu" no 1x1, "Vocês venceram!" ou "Vocês perderam" no 2x2. |
-| `meu_assento` | inteiro | **Sim** | Assento do jogador que recebe a mensagem. Tem que ser igual ao `assento` de um dos `jogadores`, senão a tela quebra. Não existe no estado guardado no servidor: é acrescentado na visão de cada jogador (P3). |
+| `meu_assento` | inteiro | **Sim** | Assento do jogador que recebe a mensagem. Tem que ser igual ao `assento` de um dos `jogadores`, senão a tela quebra. Não existe no estado guardado no servidor: é acrescentado na visão de cada jogador. Faz parte do protocolo (P3). |
 | `jogadores` | lista | **Sim** | Exatamente 2 itens (1x1) ou 4 itens (2x2). Com outra quantidade a tela quebra. A ordem da lista não importa: vale o campo `assento`. |
 | `placar` | objeto | **Sim** | `{"A": 4, "B": 7}`. As duas chaves, com números. |
 | `mao_atual` | objeto | **Sim** | Nunca `null`, nem depois do fim da partida (seção 6.4). |
@@ -211,7 +211,7 @@ A tela posiciona cada jogador pela diferença entre o `assento` dele e o `meu_as
 | `vez_assento` | inteiro ou `null` | **Sim** | Assento de quem joga agora. Com `null` (ou sem o campo) ninguém fica destacado, nenhuma carta fica clicável e a barra de ações mostra "Fim da mão.". É assim entre as mãos e depois do fim da partida (seção 6.4). |
 | `truco_pendente` | objeto ou `null` | Não | `null` ou ausente quando não há pedido em aberto. Formato mais abaixo. |
 | `ultimo_aumento_time` | texto ou `null` | Não | `"A"`, `"B"` ou `null`. O time indicado fica com o botão de truco desabilitado (P12). |
-| `aguardando_decisao_mao_de_onze` | booleano | Não | Ausente equivale a `false`. Tem que ser `true` para os botões da mão de onze aparecerem. Não está no documento de contratos (P4). |
+| `aguardando_decisao_mao_de_onze` | booleano | Não | Ausente equivale a `false`. Tem que ser `true` para os botões da mão de onze aparecerem. Faz parte do protocolo (P4). |
 | `pe` | inteiro | Não | A tela não lê. |
 
 **`truco_pendente`, quando não é `null`**
@@ -874,9 +874,9 @@ A tela passa a desenhar o que o seu servidor mandar. Algumas observações:
 
 - **P1. A tela ainda não se conecta. Resolvido.** A mesa abre como `mesa.html?partida={partida_id}` e conecta pelo `frontend/js/ws.js`, com o token do login. Ela chama `renderizarMesa` a cada `estado` e envia as mensagens como JSON. Hoje a conexão vai para o servidor simulado; com `USAR_MOCK_GAME = false`, para o Game (seção 8.3).
 - **P2. Campo `tipo` na mensagem `estado`. Resolvido.** Os campos do estado vão no primeiro nível, junto com `"tipo": "estado"`.
-- **P3. `meu_assento`.** A tela não funciona sem ele, e ele não aparece no documento de contratos, que só mostra o estado guardado no servidor. Incluir no contrato como campo da visão de cada jogador.
-- **P4. `aguardando_decisao_mao_de_onze`.** A tela depende dele para mostrar os botões "Jogar a mão" e "Correr" e para bloquear as cartas. O contrato não tem esse campo em `mao_atual`. Incluir no contrato ou combinar outra forma de indicar que a decisão está pendente.
-- **P5. Carta coberta.** O contrato diz que as cartas cobertas "aparecem como `"coberta"` sem o valor". A tela espera `"carta": null` com `"coberta": true`. Se o servidor mandar `"carta": "coberta"` sem `"coberta": true`, a tela mostra uma imagem quebrada. Fixar no contrato a forma `null` com `true`.
+- **P3. `meu_assento`. Resolvido.** Faz parte do protocolo: o `estado` enviado a cada jogador traz `meu_assento`, acrescentado na visão dele. Não existe no estado guardado no servidor (seção 4.1).
+- **P4. `aguardando_decisao_mao_de_onze`. Resolvido.** Faz parte do protocolo: `mao_atual` traz o campo, `true` enquanto o time com 11 não decide. A tela o usa para mostrar os botões "Jogar a mão" e "Correr" e para bloquear as cartas (seção 4.1).
+- **P5. Carta coberta. Resolvido.** Faz parte do protocolo: a carta jogada coberta vem como `{"carta": null, "coberta": true}`, para todos os jogadores. A forma `"carta": "coberta"`, citada no documento de contratos, não vale: sem `"coberta": true`, a tela mostraria uma imagem quebrada (seção 4.3).
 - **P6. Mão do parceiro na mão de onze. Resolvido.** No 2x2, o time com 11 pontos recebe a `mao` também no item do parceiro, com o `qtd_cartas` junto, e a tela mostra essas cartas abertas e menores junto ao parceiro (seção 4.3).
 - **P7. Chat. Resolvido.** Não existe mensagem `chat` separada: cada mensagem entra na lista `chat` do `estado`, que volta para todos com as 50 últimas (seção 6.3).
 - **P8. Reconexão. Resolvido.** Ao conectar, o servidor sempre envia o estado atual, e isso vale como reconexão, inclusive depois de um F5. A tela reconecta sozinha quando a conexão cai (seção 6.6).
