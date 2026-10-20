@@ -10,6 +10,9 @@
 <body>
   <!-- Toda a tela é desenhada dentro de #app por renderizarMesa(estado) -->
   <main id="app"></main>
+  <!-- Recados para o leitor de tela (erros, conexão, fim de partida). Fica fora de #app para
+       não ser refeito a cada estado. -->
+  <p class="so-leitor" id="anuncio" role="status" aria-live="polite"></p>
   <script type="module" src="js/paginas/mesa.js"></script>
 </body>
 </html>

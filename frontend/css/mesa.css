@@ -27,6 +27,7 @@ body {
 }
 
 .area-mesa {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -480,6 +481,33 @@ body {
   text-transform: uppercase;
 }
 
+/* ---------- Sair da partida ---------- */
+
+/* Discreto, no canto da mesa oposto ao placar */
+.botao-sair {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  padding: 4px 12px;
+  border: 1px solid rgba(251, 248, 241, 0.16);
+  border-radius: 999px;
+  background: rgba(12, 22, 17, 0.55);
+  color: var(--texto-suave);
+  font-size: 13px;
+  transition: color 0.15s ease, border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.botao-sair:hover {
+  border-color: rgba(251, 248, 241, 0.35);
+  background: rgba(12, 22, 17, 0.85);
+  color: var(--texto);
+}
+
+.botao-sair:focus-visible {
+  outline: 2px solid var(--dourado);
+  outline-offset: 2px;
+}
+
 /* ---------- Barra de ações ---------- */
 
 .barra-acoes {
@@ -503,6 +531,31 @@ body {
   color: var(--dourado);
   font-size: 15px;
   font-weight: 700;
+}
+
+/* Erro de uma ação, por alguns segundos, no lugar da situação da mão */
+.aviso.erro {
+  color: #F0907C;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+/* Conexão caída: a mesa continua na tela, com os controles desabilitados */
+.aviso.conexao {
+  color: var(--texto);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.aviso.conexao::before {
+  content: "";
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 8px;
+  border-radius: 50%;
+  background: var(--dourado);
+  vertical-align: 1px;
 }
 
 .controles,
@@ -662,11 +715,196 @@ body {
   min-width: 0;
 }
 
+/* ---------- Sobre a mesa: confirmação de saída e fim de partida ---------- */
+
+/* Cobre a mesa e a barra de ações; o chat fica de fora */
+.sobreposicao {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(10, 12, 14, 0.6);
+}
+
+.dialogo {
+  width: min(380px, 100%);
+  padding: 20px 22px 18px;
+  border: 1px solid var(--painel-borda);
+  border-radius: 14px;
+  background: var(--painel);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.55);
+}
+
+.dialogo-titulo {
+  font-family: var(--fonte-titulo);
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.dialogo-texto {
+  margin-top: 6px;
+  color: var(--texto-suave);
+}
+
+.dialogo-botoes {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+/* Fim de partida: um cartão creme, como as cartas, com filete dourado por dentro */
+.fim-partida {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  width: min(360px, 100%);
+  padding: 26px 28px 24px;
+  border: 1px solid var(--borda-carta);
+  border-radius: 16px;
+  background: var(--creme);
+  color: var(--tinta);
+  text-align: center;
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.4),
+    0 18px 40px rgba(0, 0, 0, 0.5);
+}
+
+.fim-partida::before {
+  content: "";
+  position: absolute;
+  inset: 7px;
+  border: 1px solid rgba(168, 134, 47, 0.45);
+  border-radius: 11px;
+  pointer-events: none;
+}
+
+.fim-rotulo {
+  color: var(--tinta-suave);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.fim-titulo {
+  font-family: var(--fonte-titulo);
+  font-size: 32px;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.fim-placar {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  width: 100%;
+  margin: 4px 0 6px;
+}
+
+.fim-time {
+  padding: 6px 8px 8px;
+  border-top: 4px solid var(--cor-time);
+  border-radius: 8px;
+  background: var(--creme-escuro);
+}
+
+.fim-time .rotulo {
+  display: block;
+  color: var(--tinta-suave);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.fim-time .pontos {
+  display: block;
+  font-family: var(--fonte-titulo);
+  font-size: 34px;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.fim-partida .botao-principal {
+  position: relative;
+  width: 100%;
+}
+
+/* ---------- Espera: antes do primeiro estado ---------- */
+
+/* O mesmo feltro da lista de salas do lobby, com três cartas viradas em leque */
+.espera {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 100vh;
+  padding: 24px;
+  text-align: center;
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 .17 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"),
+    radial-gradient(ellipse at 50% 30%, var(--feltro-claro) 0%, var(--feltro) 50%, var(--feltro-escuro) 100%);
+}
+
+.espera-cartas {
+  --l: 72px;
+  display: flex;
+  justify-content: center;
+  margin-bottom: 22px;
+}
+
+.espera-cartas .carta:nth-child(1) {
+  transform: translate(22px, 8px) rotate(-14deg);
+}
+
+.espera-cartas .carta:nth-child(2) {
+  position: relative;
+  z-index: 1;
+}
+
+.espera-cartas .carta:nth-child(3) {
+  transform: translate(-22px, 8px) rotate(14deg);
+}
+
+.espera-titulo {
+  font-family: var(--fonte-titulo);
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.espera-texto {
+  color: rgba(251, 248, 241, 0.78);
+}
+
+.espera .botao {
+  margin-top: 14px;
+}
+
+/* Só para o leitor de tela. Presa no topo: depois da tela de 100vh, criaria uma rolagem. */
+.so-leitor {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 /* ---------- Seletor de mock (FERRAMENTA DE DESENVOLVIMENTO: remover depois) ---------- */
 
+/* Abaixo do botão de sair, no mesmo canto */
 .dev-seletor-mock {
   position: fixed;
-  top: 36px;
+  top: 86px;
   right: calc(var(--largura-chat) + 40px);
   z-index: 10;
   padding: 1px 4px;
