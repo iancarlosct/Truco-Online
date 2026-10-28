@@ -191,6 +191,14 @@ function criarMaoOculta(quantidade) {
   return mao;
 }
 
+// Nome de um jogador. Nomes longos são cortados com reticências pelo CSS; o nome inteiro fica
+// no title.
+function criarNome(nome, classes) {
+  const elemento = el("span", classes, nome);
+  elemento.title = nome;
+  return elemento;
+}
+
 // Jogador na mesa: plaquinha (time, nome, selos) + a mão já montada.
 function criarJogador(jogador, { posicao, naVez, souEu, mao }) {
   const raiz = el("div", `jogador pos-${posicao} ${classeTime(jogador.time)}`);
@@ -199,7 +207,7 @@ function criarJogador(jogador, { posicao, naVez, souEu, mao }) {
 
   const plaquinha = el("div", "plaquinha");
   plaquinha.title = `Time ${jogador.time}`;
-  plaquinha.append(el("span", "cor-time"), el("span", "nome", jogador.nome));
+  plaquinha.append(el("span", "cor-time"), criarNome(jogador.nome, "nome"));
   if (souEu) plaquinha.append(el("span", "voce", "(você)"));
   if (jogador.bot) plaquinha.append(el("span", "selo-bot", "BOT"));
   plaquinha.append(el("span", "selo-vez", "vez"));
@@ -367,10 +375,7 @@ function criarChat(mensagens, jogadores, rascunho, podeEnviar, aoEnviar, aoDigit
     const item = el("li", "chat-mensagem");
     // O autor ganha a cor do time quando o nome corresponde a um jogador da mesa.
     const autor = jogadores.find((j) => j.nome === mensagem.de);
-    item.append(
-      el("span", `autor ${autor ? classeTime(autor.time) : ""}`, mensagem.de),
-      el("span", "texto", mensagem.texto),
-    );
+    item.append(criarNome(mensagem.de, `autor ${autor ? classeTime(autor.time) : ""}`), el("span", "texto", mensagem.texto));
     lista.append(item);
   }
 

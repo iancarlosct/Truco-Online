@@ -5,7 +5,7 @@
 // Como no lobby, a área principal é desenhada por inteiro, a partir do estado, por uma única
 // função (renderizar); nenhum outro trecho mexe no DOM dela.
 
-import { ErroApi, obterJogador } from "../api.js";
+import { ErroApi, conferirSessao, obterJogador } from "../api.js";
 import { exigirLogin, obterUsuario, sair } from "../auth.js";
 import { criarVerso } from "../cartas.js";
 
@@ -70,7 +70,7 @@ function aproveitamento(vitorias, partidas) {
 // Nome do usuário logado e o link de volta ao lobby, no cabeçalho.
 function renderizarUsuario() {
   const nome = criarNome(usuario.nome, "usuario-nome");
-  nome.title = usuario.email ?? usuario.nome;
+  nome.title = usuario.email ? `${usuario.nome} (${usuario.email})` : usuario.nome;
   const voltar = el("a", "botao", "Voltar ao lobby");
   voltar.href = PAGINA_LOBBY;
   areaUsuario.replaceChildren(nome, voltar);
@@ -282,4 +282,6 @@ function iniciar() {
   });
 }
 
-if (exigirLogin()) iniciar();
+// Sem sessão, exigirLogin() manda para o login; com um token que o Auth recusa, conferirSessao()
+// manda para o login com o aviso de sessão expirada. Nos dois casos a página não é montada.
+if (exigirLogin() && (await conferirSessao())) iniciar();

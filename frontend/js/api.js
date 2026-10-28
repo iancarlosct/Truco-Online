@@ -128,6 +128,26 @@ export function login(email, senha) {
   return requisitar("POST", "/auth/login", { email, senha });
 }
 
+// GET /api/auth/me. Devolve o usuário do token: { id, nome, email }.
+export function obterUsuarioLogado() {
+  return requisitar("GET", "/auth/me");
+}
+
+// Confere o token no Auth ao abrir uma página que exige login, antes de montá-la: um token
+// vencido leva logo para o login, com o aviso de sessão expirada, em vez de a página abrir e
+// falhar na primeira chamada. Devolve false quando o Auth recusa o token (401: requisitar() já
+// encerrou a sessão), e a página não deve continuar. Qualquer outra falha (Auth fora do ar, por
+// exemplo) não impede a página: as chamadas dela mostram o erro.
+//   if (exigirLogin() && (await conferirSessao())) iniciar();
+export async function conferirSessao() {
+  try {
+    await obterUsuarioLogado();
+    return true;
+  } catch (erro) {
+    return !(erro instanceof ErroApi && erro.status === 401);
+  }
+}
+
 // ---------- Serviço Lobby ----------
 // As rotas que devolvem uma sala usam sempre o mesmo formato:
 //   { id, formato: "1x1" | "2x2", dono_id, status: "aguardando" | "em_partida", partida_id,

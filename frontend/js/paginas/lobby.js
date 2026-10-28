@@ -9,6 +9,7 @@
 import {
   ErroApi,
   adicionarBot,
+  conferirSessao,
   criarSala,
   entrarNaSala,
   iniciarPartida,
@@ -200,7 +201,7 @@ function enderecoDoHistorico(usuarioId) {
 // Nome do usuário logado, o link "Meu histórico" e o botão Sair, no cabeçalho.
 function renderizarUsuario() {
   const nome = el("span", "usuario-nome", usuario.nome);
-  nome.title = usuario.email ?? "";
+  nome.title = usuario.email ? `${usuario.nome} (${usuario.email})` : usuario.nome;
   const historico = el("a", "botao", "Meu histórico");
   historico.href = enderecoDoHistorico();
   historico.dataset.chave = "historico";
@@ -274,7 +275,9 @@ function criarCartaoSala(sala) {
   // Para o leitor de tela, o botão diz de que sala é ("Entrar: sala 2x2 de Maria").
   botao.setAttribute("aria-label", `${botao.textContent}: ${minha ? "sua sala" : "sala"} ${sala.formato}${minha ? "" : ` de ${nomeDono}`}`);
 
-  cartao.append(topo, lugares, el("p", "dono", minha ? "Sua sala" : `Sala de ${nomeDono}`), botao);
+  const textoDono = el("p", "dono", minha ? "Sua sala" : `Sala de ${nomeDono}`);
+  textoDono.title = textoDono.textContent;
+  cartao.append(topo, lugares, textoDono, botao);
   return cartao;
 }
 
@@ -326,7 +329,9 @@ function criarAssento(assento, sala, ctx) {
     if (souEu) raiz.classList.add("meu");
     const plaquinha = el("div", "plaquinha");
     plaquinha.title = `Time ${time}`;
-    plaquinha.append(el("span", "cor-time"), el("span", "nome", assento.nome));
+    const nome = el("span", "nome", assento.nome);
+    nome.title = assento.nome;
+    plaquinha.append(el("span", "cor-time"), nome);
     if (souEu) plaquinha.append(el("span", "voce", "(você)"));
     if (assento.bot) plaquinha.append(el("span", "selo-bot", "BOT"));
     if (assento.usuario_id && assento.usuario_id === sala.dono_id) plaquinha.append(el("span", "selo-dono", "dono"));
@@ -410,10 +415,9 @@ function renderizarSala() {
   const ctx = derivarSala(sala);
   const dono = sala.assentos.find((a) => a.usuario_id === sala.dono_id);
   const topo = el("div", "sala-topo");
-  topo.append(
-    criarTituloVista(ctx.souDono ? `Sua sala ${sala.formato}` : `Sala ${sala.formato} de ${dono?.nome ?? "outro jogador"}`),
-    el("p", "dica", ctx.duplas ? "Parceiros sentam frente a frente." : "Um contra um."),
-  );
+  const titulo = criarTituloVista(ctx.souDono ? `Sua sala ${sala.formato}` : `Sala ${sala.formato} de ${dono?.nome ?? "outro jogador"}`);
+  titulo.title = titulo.textContent;
+  topo.append(titulo, el("p", "dica", ctx.duplas ? "Parceiros sentam frente a frente." : "Um contra um."));
 
   // A mesa vista de cima, como na mesa de jogo: você embaixo e os outros em volta.
   const feltro = el("div", "feltro");
@@ -819,4 +823,6 @@ function iniciar() {
   });
 }
 
-if (exigirLogin()) iniciar();
+// Sem sessão, exigirLogin() manda para o login; com um token que o Auth recusa, conferirSessao()
+// manda para o login com o aviso de sessão expirada. Nos dois casos a página não é montada.
+if (exigirLogin() && (await conferirSessao())) iniciar();

@@ -74,8 +74,13 @@ body {
   gap: 12px;
 }
 
+/* Nomes longos são cortados com reticências em toda a tela; o nome inteiro fica no title */
 .usuario-nome {
+  max-width: 220px;
+  overflow: hidden;
   font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* ---------- Botões ---------- */
@@ -367,7 +372,15 @@ body {
   padding: 2px 8px 0;
 }
 
+.sala-topo .titulo-vista {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .sala-topo .dica {
+  flex: none;
   color: var(--texto-suave);
   font-size: 14px;
 }
@@ -558,7 +571,10 @@ body {
 }
 
 .plaquinha .nome {
+  max-width: 160px;
+  overflow: hidden;
   font-weight: 600;
+  text-overflow: ellipsis;
 }
 
 .plaquinha .voce {

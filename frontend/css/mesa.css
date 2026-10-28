@@ -148,8 +148,13 @@ body {
   box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.35);
 }
 
+/* Nome longo cortado com reticências (o nome inteiro fica no title), para a plaquinha não
+   invadir o centro da mesa nem empurrar os selos */
 .plaquinha .nome {
+  max-width: 150px;
+  overflow: hidden;
   font-weight: 600;
+  text-overflow: ellipsis;
 }
 
 .plaquinha .voce {
@@ -739,9 +744,12 @@ body {
 
 .chat-mensagem .autor {
   display: block;
+  overflow: hidden;
   color: var(--cor-time, var(--texto-suave));
   font-size: 12px;
   font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .chat-vazio {
