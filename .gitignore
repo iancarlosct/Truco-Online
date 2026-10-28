@@ -1,0 +1,8 @@
+# Configuração local com segredos: cada pessoa cria a sua a partir do .env.example
+.env
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/

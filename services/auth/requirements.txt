@@ -1,0 +1,17 @@
+# Dependências do serviço Auth, com as versões fixas para todos instalarem o mesmo.
+
+# API
+fastapi==0.162.0
+uvicorn==0.54.0
+
+# Banco: SQLAlchemy 2 com o driver psycopg 3 (o [binary] já traz o necessário para o Postgres)
+sqlalchemy==2.1.6
+psycopg[binary]==3.3.6
+
+# Senha (argon2) e token (JWT). No código, os imports são "argon2" e "jwt".
+argon2-cffi==25.1.0
+pyjwt==2.15.1
+
+# Testes (rodam dentro do container: docker compose run --rm auth pytest)
+pytest==9.2.0
+httpx2==2.16.0  # usado pelo TestClient do FastAPI

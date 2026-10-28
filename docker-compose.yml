@@ -1,0 +1,111 @@
+# Truco Online: todos os containers do sistema. Sobe tudo com:
+#   docker compose up --build
+# As variáveis ${...} vêm do arquivo .env da raiz (crie a partir do .env.example).
+#
+# ---------------------------------------------------------------------------------------------
+# Organização: microserviços, um banco por serviço, redes separadas
+# ---------------------------------------------------------------------------------------------
+# - O navegador só fala com o gateway (Nginx). Ele é o ÚNICO container com "ports:", isto é,
+#   o único que o computador (host) enxerga. Os serviços e os bancos não publicam porta nenhuma.
+# - Cada serviço é independente: tem o seu diretório em services/<nome>/, o seu Dockerfile e o
+#   seu código. Um serviço nunca importa código de outro.
+# - Cada serviço que guarda dados tem o SEU banco, num container Postgres próprio, com volume e
+#   credenciais próprios. Nenhum serviço conecta no banco de outro.
+#
+# As redes garantem essas regras (um container só alcança quem está numa rede em comum):
+#
+#   rede-servicos   gateway + todos os serviços. É por ela que o gateway repassa as requisições
+#                   e que os serviços conversam entre si (HTTP, WebSocket, eventos).
+#   rede-auth-db    auth + auth-db, e mais ninguém. Marcada como "internal": não tem saída para
+#                   fora do Docker. O gateway nem consegue achar o nome "auth-db".
+#
+#        navegador
+#            |  porta ${GATEWAY_PORTA} (padrão 80)
+#        [gateway] ----- rede-servicos ----- [auth] ----- rede-auth-db ----- [auth-db]
+#
+# Nas próximas fases, repita o padrão para cada serviço novo:
+# - o serviço entra na rede-servicos (para receber as requisições do gateway);
+# - se ele tiver banco, crie um container <servico>-db, uma rede rede-<servico>-db (internal)
+#   só com os dois, um volume <servico>-db-dados e variáveis <SERVICO>_DB_* no .env.
+#   Exemplos: lobby + lobby-db em rede-lobby-db; ranking + ranking-db em rede-ranking-db.
+# ---------------------------------------------------------------------------------------------
+
+# Nome fixo do projeto: os containers, as redes e os volumes ganham o prefixo "truco-online",
+# qualquer que seja o nome da pasta do repositório.
+name: truco-online
+
+services:
+  # Gateway: entrega os arquivos do frontend e repassa /api/... a cada serviço (gateway/nginx.conf).
+  gateway:
+    image: nginx:1.30-alpine
+    restart: unless-stopped
+    ports:
+      - "${GATEWAY_PORTA:-80}:80"
+    volumes:
+      # Arquivos montados só para leitura: mudanças no frontend aparecem sem reconstruir nada.
+      - ./gateway/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./frontend:/usr/share/nginx/html:ro
+    networks:
+      - rede-servicos
+    depends_on:
+      auth:
+        condition: service_healthy
+
+  # Serviço Auth: cadastro, login e emissão do JWT (docs/guia-backend-login.md).
+  auth:
+    build: ./services/auth
+    restart: unless-stopped
+    environment:
+      JWT_SEGREDO: ${JWT_SEGREDO:?defina JWT_SEGREDO no .env (copie o .env.example)}
+      # Dentro do container, o serviço lê sempre BANCO_*; o docker-compose diz qual é o banco.
+      BANCO_HOST: auth-db
+      BANCO_PORTA: "5432"
+      BANCO_NOME: ${AUTH_DB_NOME:?defina AUTH_DB_NOME no .env (copie o .env.example)}
+      BANCO_USUARIO: ${AUTH_DB_USUARIO:?defina AUTH_DB_USUARIO no .env (copie o .env.example)}
+      BANCO_SENHA: ${AUTH_DB_SENHA:?defina AUTH_DB_SENHA no .env (copie o .env.example)}
+    networks:
+      - rede-servicos
+      - rede-auth-db
+    depends_on:
+      auth-db:
+        condition: service_healthy
+    # GET /saude responde 200 quando o serviço está no ar e alcança o banco. A rota não passa
+    # pelo gateway: é chamada aqui de dentro do próprio container.
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/saude', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+      start_interval: 2s
+
+  # Banco do Auth. Só o serviço auth chega até ele (rede-auth-db).
+  auth-db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${AUTH_DB_NOME:?defina AUTH_DB_NOME no .env (copie o .env.example)}
+      POSTGRES_USER: ${AUTH_DB_USUARIO:?defina AUTH_DB_USUARIO no .env (copie o .env.example)}
+      POSTGRES_PASSWORD: ${AUTH_DB_SENHA:?defina AUTH_DB_SENHA no .env (copie o .env.example)}
+    volumes:
+      - auth-db-dados:/var/lib/postgresql/data
+    networks:
+      - rede-auth-db
+    # Pronto quando aceita conexões pela rede (-h 127.0.0.1). Sem o -h, o teste usaria o socket
+    # local e daria "pronto" ainda durante a inicialização do banco, antes de ele ouvir a rede.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+      start_interval: 2s
+
+networks:
+  rede-servicos: {}
+  rede-auth-db:
+    internal: true
+
+volumes:
+  # Dados do banco do Auth. Sobrevivem a "docker compose down"; só "down -v" apaga.
+  auth-db-dados:
