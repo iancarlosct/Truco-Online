@@ -927,6 +927,25 @@ body {
   transform: translate(-50%, -50%);
 }
 
+/* Confetes da vitória: retângulos e bolinhas, com a cor posta por js/animacoes.js */
+.confete {
+  position: absolute;
+  width: 8px;
+  height: 12px;
+  border-radius: 2px;
+}
+
+.confete:nth-child(3n) {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+}
+
+.confete:nth-child(4n + 1) {
+  width: 6px;
+  height: 14px;
+}
+
 /* ---------- Espera: antes do primeiro estado ---------- */
 
 /* O mesmo feltro da lista de salas do lobby, com três cartas viradas em leque */

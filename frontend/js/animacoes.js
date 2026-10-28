@@ -2,7 +2,7 @@
 // A mesa continua sendo redesenhada inteira por renderizarMesa(estado) a cada estado recebido.
 // Este módulo não desenha nada nem conhece as regras do jogo: compara o estado anterior com o
 // novo para descobrir o que mudou (carta jogada, mão nova, pedido de truco, rodada decidida,
-// placar) e anima os elementos que a mesa acabou de desenhar, partindo de onde as coisas estavam
+// placar, fim da partida) e anima os elementos que a mesa acabou de desenhar, partindo de onde as coisas estavam
 // na tela antiga.
 //
 // Uso, a cada estado recebido do servidor:
@@ -13,8 +13,8 @@
 // - Só transform e opacity, pela Web Animations API (element.animate), sem bibliotecas.
 // - Nada espera uma animação terminar. Se outro estado chegar no meio, a mesa é redesenhada na
 //   hora e as animações somem junto com os elementos antigos: a tela vai direto para o novo.
-//   Só o aviso de truco fica na camada #efeitos, fora da mesa, para não sumir com um estado
-//   que só traz uma mensagem do chat; um pedido novo substitui o anterior.
+//   Só o aviso de truco e os confetes ficam na camada #efeitos, fora da mesa, para não sumirem
+//   com um estado que só traz uma mensagem do chat; um pedido novo substitui o anterior.
 // - Sem estado anterior (primeiro estado de uma conexão: ao abrir a mesa, depois de um F5 ou
 //   de uma queda), nada é animado.
 // - Com prefers-reduced-motion ligado no sistema, nada se move: só fades curtíssimos.
@@ -26,7 +26,12 @@ const INTERVALO_DISTRIBUICAO_MS = 60; // entre uma carta e a seguinte, na distri
 const DURACAO_AVISO_TRUCO_MS = 1000; // o pedido em destaque, do surgimento até sumir
 const DURACAO_DESTAQUE_MS = 300; // cartas do time vencedor subindo, marcador da rodada pulsando
 const DURACAO_PLACAR_MS = 450; // contagem dos pontos
+const DURACAO_FIM_MS = 400; // entrada da tela de fim de partida (na derrota, 1,5 vez isso)
+const DURACAO_CONFETES_MS = [1400, 2200]; // queda de cada confete, sorteada no intervalo
 const DURACAO_FADE_REDUZIDO_MS = 120; // com prefers-reduced-motion, no lugar dos movimentos
+
+const QTD_CONFETES = 70;
+const CORES_CONFETES = ["var(--dourado)", "var(--creme)", "var(--time-a)", "var(--time-b)", "var(--verde-acao)"];
 
 // Os mesmos nomes do aviso da barra de ações (NOME_PEDIDO, em mesa.js).
 const TEXTO_PEDIDO = { 3: "Truco!", 6: "Seis!", 9: "Nove!", 12: "Doze!" };
@@ -65,6 +70,9 @@ function compararEstados(anterior, novo) {
     placar: ["A", "B"]
       .filter((time) => anterior.placar[time] !== novo.placar[time])
       .map((time) => [time, anterior.placar[time], novo.placar[time]]),
+    // A partida acabou agora (e não já encerrada, como chega a quem reconecta depois do fim).
+    fim: anterior.status !== "encerrada" && novo.status === "encerrada",
+    venceu: novo.vencedor_time === jogadorDe(novo, novo.meu_assento)?.time,
   };
 }
 
@@ -229,11 +237,10 @@ function destacarRodada(raiz, indice, atraso) {
   );
 }
 
-// Pontos de um time: o número conta do valor anterior até o novo, crescendo um instante. Vale
-// para o placar da mesa e para o da tela de fim de partida.
-function contarPontos(raiz, time, de, ate, atraso) {
-  const seletor = `.placar-time.time-${time.toLowerCase()} .pontos, .fim-time.time-${time.toLowerCase()} .pontos`;
-  for (const numero of raiz.querySelectorAll(seletor)) {
+// Pontos de um time: o número conta do valor anterior até o novo, crescendo um instante.
+// Recebe o bloco do time (no placar da mesa ou no da tela de fim de partida).
+function contarPontos(blocos, de, ate, atraso) {
+  for (const numero of blocos.map((bloco) => bloco.querySelector(".pontos")).filter(Boolean)) {
     numero.textContent = String(de);
     const inicio = performance.now() + atraso;
     const contar = (instante) => {
@@ -279,6 +286,78 @@ function anunciarPedido(raiz, pedido, reduzir) {
   animacao.onfinish = () => aviso.remove();
 }
 
+// Confetes da vitória: estouram do alto do cartão do resultado, sobem e caem até o fim da área
+// da mesa, girando, sem passar para o chat.
+function soltarConfetes(cartao, area, atraso) {
+  if (!camadaEfeitos || !area) return;
+  camadaEfeitos.querySelector(".confetes")?.remove();
+  const limites = area.getBoundingClientRect();
+  const origem = cartao.getBoundingClientRect();
+  const x = origem.left + origem.width / 2;
+  const y = origem.top + 12;
+  const alcance = Math.min(x - limites.left, limites.right - x) * 0.9;
+  const queda = limites.bottom - y + 30;
+
+  const confetes = document.createElement("div");
+  confetes.className = "confetes";
+  let restantes = QTD_CONFETES;
+  for (let i = 0; i < QTD_CONFETES; i++) {
+    const confete = document.createElement("span");
+    confete.className = "confete";
+    confete.style.left = `${x}px`;
+    confete.style.top = `${y}px`;
+    confete.style.background = CORES_CONFETES[i % CORES_CONFETES.length];
+    confetes.append(confete);
+
+    // Sobe freando até o ponto mais alto e cai acelerando, girando o tempo todo.
+    const dx = (Math.random() * 2 - 1) * alcance;
+    const subida = 80 + Math.random() * 220;
+    const giro = (Math.random() * 2 - 1) * 900;
+    const centralizar = "translate(-50%, -50%)";
+    const alto = `${centralizar} translate(${dx * 0.4}px, ${-subida}px) rotate(${giro * 0.3}deg)`;
+    const chao = `${centralizar} translate(${dx}px, ${queda}px) rotate(${giro}deg)`;
+    const [minimo, maximo] = DURACAO_CONFETES_MS;
+    const animacao = confete.animate(
+      [
+        { transform: centralizar, opacity: 0, easing: "cubic-bezier(0.2, 0.7, 0.4, 1)" },
+        { opacity: 1, offset: 0.04 },
+        { transform: alto, offset: 0.3, easing: "ease-in" },
+        { opacity: 1, offset: 0.75 },
+        { transform: chao, opacity: 0 },
+      ],
+      {
+        duration: minimo + Math.random() * (maximo - minimo),
+        delay: atraso + Math.random() * 150,
+        fill: "backwards",
+      },
+    );
+    animacao.onfinish = () => {
+      if (--restantes === 0) confetes.remove();
+    };
+  }
+  camadaEfeitos.append(confetes);
+}
+
+// Fim de partida: o resultado entra depois que a última carta chega e o destaque da rodada
+// aparece. Na vitória, o cartão salta e os confetes estouram; na derrota, ele só desce devagar
+// até o lugar.
+function mostrarFim(raiz, venceu, atraso, reduzir) {
+  const cartao = raiz.querySelector(".fim-partida");
+  const fundo = cartao?.closest(".sobreposicao");
+  if (!fundo) return;
+  if (reduzir) {
+    aparecer(fundo, atraso);
+    return;
+  }
+  const duracao = venceu ? DURACAO_FIM_MS : DURACAO_FIM_MS * 1.5;
+  fundo.animate([{ opacity: 0 }, { opacity: 1 }], { duration: duracao, delay: atraso, fill: "backwards" });
+  const quadros = venceu
+    ? [{ transform: "scale(0.8)" }, { transform: "scale(1.04)", offset: 0.6 }, { transform: "scale(1)" }]
+    : [{ transform: "translateY(-18px)" }, { transform: "none" }];
+  cartao.animate(quadros, { duration: duracao, delay: atraso, easing: "ease-out", fill: "backwards" });
+  if (venceu) soltarConfetes(cartao, raiz.querySelector(".area-mesa"), atraso);
+}
+
 // ---------- Entrada ----------
 
 // Chamada antes de redesenhar a mesa com o estado novo: descobre o que mudou e mede, na tela
@@ -307,13 +386,21 @@ export function prepararAnimacoes(anterior, novo, raiz) {
     });
 
     if (mudou.pedido) anunciarPedido(raiz, mudou.pedido, reduzir);
+
+    // O que depende da carta que acabou de ser jogada começa quando ela chega ao centro, e o
+    // fim de partida, depois do destaque da rodada.
+    const chegada = !reduzir && mudou.jogadas.length > 0 ? DURACAO_MOVIMENTO_MS : 0;
+    const entradaFim = chegada + (!reduzir && mudou.rodadaDecidida !== null ? DURACAO_DESTAQUE_MS : 0);
+    if (mudou.fim) mostrarFim(raiz, mudou.venceu, entradaFim, reduzir);
     // Com o movimento reduzido, o destaque da rodada e os pontos novos aparecem direto.
     if (reduzir) return;
 
     if (mudou.jogadas.length > 0) ajeitarMinhaMao(raiz, meuAssento, minhaMao);
-    // O que depende da carta que acabou de ser jogada começa quando ela chega ao centro.
-    const chegada = mudou.jogadas.length > 0 ? DURACAO_MOVIMENTO_MS : 0;
     if (mudou.rodadaDecidida !== null) destacarRodada(raiz, mudou.rodadaDecidida, chegada);
-    for (const [time, de, ate] of mudou.placar) contarPontos(raiz, time, de, ate, chegada);
+    for (const [time, de, ate] of mudou.placar) {
+      const classe = `time-${time.toLowerCase()}`;
+      contarPontos([...raiz.querySelectorAll(`.placar-time.${classe}`)], de, ate, chegada);
+      contarPontos([...raiz.querySelectorAll(`.fim-time.${classe}`)], de, ate, entradaFim);
+    }
   };
 }
