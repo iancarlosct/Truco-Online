@@ -13,6 +13,10 @@
   <!-- Recados para o leitor de tela (erros, conexão, fim de partida). Fica fora de #app para
        não ser refeito a cada estado. -->
   <p class="so-leitor" id="anuncio" role="status" aria-live="polite"></p>
+  <!-- Camada das animações que não podem sumir quando a mesa é redesenhada (o aviso de truco em
+       destaque e os confetes da vitória), por cima de tudo e sem receber cliques. Preenchida por
+       js/animacoes.js. -->
+  <div class="efeitos" id="efeitos" aria-hidden="true"></div>
   <script type="module" src="js/paginas/mesa.js"></script>
 </body>
 </html>

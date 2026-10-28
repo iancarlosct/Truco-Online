@@ -310,6 +310,13 @@ body {
   outline: none;
 }
 
+/* Com o movimento reduzido no sistema, a carta sobe sem deslizar */
+@media (prefers-reduced-motion: reduce) {
+  .carta-mao {
+    transition: filter 0.15s ease;
+  }
+}
+
 /* ---------- Centro: cartas jogadas, vira e rodadas ---------- */
 
 /* Ponto de referência no meio da área livre; os filhos se posicionam a partir dele */
@@ -359,6 +366,28 @@ body {
 .jogada.pos-direita {
   --dx: calc(var(--l) * 0.8);
   --giro: 6deg;
+}
+
+/* Rodada decidida: as cartas do time vencedor vêm para a frente, sobem um pouco e ganham um
+   contorno na cor do time */
+.jogada.vencedora {
+  z-index: 1;
+  translate: 0 calc(var(--l) * -0.1);
+}
+
+.jogada.vencedora::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border: 3px solid var(--cor-time);
+  border-radius: calc(var(--l) * 0.052 + 4px);
+  box-shadow: 0 0 16px var(--cor-time);
+  pointer-events: none;
+}
+
+/* Carta a caminho do centro (js/animacoes.js): passa por cima das mãos e das plaquinhas */
+.jogada.voando {
+  z-index: 2;
 }
 
 .rotulo-mesa {
@@ -864,6 +893,57 @@ body {
 .fim-partida .botao-principal {
   position: relative;
   width: 100%;
+}
+
+/* ---------- Efeitos: camada das animações fora da mesa (js/animacoes.js) ---------- */
+
+/* Por cima de tudo, inclusive da tela de fim de partida, sem receber cliques. O overflow
+   impede que algo saindo da tela crie barras de rolagem. */
+.efeitos {
+  position: fixed;
+  inset: 0;
+  z-index: 8;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+/* Pedido de truco em destaque, no centro da mesa, com a cor do time que pediu */
+.aviso-pedido {
+  position: absolute;
+  padding: 2px 30px 8px;
+  border: 3px solid var(--cor-time);
+  border-radius: 18px;
+  background: rgba(12, 22, 17, 0.88);
+  color: var(--dourado);
+  font-family: var(--fonte-titulo);
+  font-size: clamp(56px, 11vh, 92px);
+  font-weight: 700;
+  line-height: 1.1;
+  white-space: nowrap;
+  text-shadow: 0 3px 0 rgba(0, 0, 0, 0.55);
+  box-shadow:
+    0 0 28px var(--cor-time),
+    0 14px 34px rgba(0, 0, 0, 0.55);
+  transform: translate(-50%, -50%);
+}
+
+/* Confetes da vitória: retângulos e bolinhas, com a cor posta por js/animacoes.js */
+.confete {
+  position: absolute;
+  width: 8px;
+  height: 12px;
+  border-radius: 2px;
+}
+
+.confete:nth-child(3n) {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+}
+
+.confete:nth-child(4n + 1) {
+  width: 6px;
+  height: 14px;
 }
 
 /* ---------- Espera: antes do primeiro estado ---------- */
