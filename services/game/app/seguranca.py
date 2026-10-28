@@ -9,7 +9,7 @@ Dois tipos de token valem:
 - Jogador: o token do login, emitido pelo Auth. O "sub" é o id do usuário (UUID em texto), o
   mesmo "usuario_id" que o Lobby mandou na criação da partida. É por ele que o Game acha o
   assento do jogador.
-- Bot (serviço de Bots, fase 4): o serviço de Bots assina o próprio token com o mesmo
+- Bot (serviço de Bots, services/bots): o serviço de Bots assina o próprio token com o mesmo
   JWT_SEGREDO, em HS256, com "sub" no formato "bot-<partida_id>-<assento>", "nome" (o nome do
   assento, como "Bot 1") e "exp". O Game aceita esse token só na partida e no assento que
   ele indica, e só se o assento foi criado como bot. Um sub de usuário nunca começa com "bot-"

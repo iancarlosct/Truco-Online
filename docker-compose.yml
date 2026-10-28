@@ -21,8 +21,8 @@
 #   rede-game-redis  game + game-redis, e mais ninguém (internal), no mesmo padrão.
 #   rede-lobby-db    lobby + lobby-db (internal), no mesmo padrão.
 #   rede-ranking-db  ranking + ranking-db (internal), no mesmo padrão.
-#   rede-eventos     game, lobby, ranking + eventos (internal). Na fase 4, os bots também entram.
-#                    O gateway e o auth não entram.
+#   rede-eventos     game, lobby, ranking, bots + eventos (internal). O gateway e o auth não
+#                    entram.
 #
 #        navegador
 #            |  porta ${GATEWAY_PORTA} (padrão 80)
@@ -33,28 +33,34 @@
 #                              +------------ [ranking] --- rede-ranking-db --- [ranking-db]
 #                              |                |
 #                              +------------ [game] ------ rede-game-redis --- [game-redis]
+#                              |                |
+#                              +------------ [bots]         (sem banco)
 #                                               |
-#                     lobby, ranking e game --- rede-eventos ----------------- [eventos]
+#               lobby, ranking, game e bots --- rede-eventos ----------------- [eventos]
 #
 # O lobby chama o game pela rede-servicos (POST /interno/partidas, fora do gateway). O ranking
-# não é chamado por ninguém além do gateway: só lê o evento partida.finalizada do broker.
+# não é chamado por ninguém além do gateway: só lê o evento partida.finalizada do broker. O bots
+# não é chamado por ninguém: lê o bot.solicitado do broker e conecta ao WebSocket do game pela
+# rede-servicos (ws://game:8000), como um jogador.
 #
 # game-redis e eventos: dois Redis com papéis diferentes
 # - game-redis é o BANCO do Game, como o auth-db é o do Auth: guarda o estado das partidas (e a
 #   fila de eventos ainda não entregues). É dado do Game, e nenhum outro serviço o acessa.
 # - eventos é o BROKER, o meio de comunicação entre os serviços: o Game publica nele os eventos
 #   partida.criada e partida.finalizada (Redis Streams, um stream por evento), e os outros
-#   serviços os leem (lobby e ranking; o lobby também publica bot.solicitado). Não guarda dado
-#   de ninguém: só as mensagens em trânsito.
+#   serviços os leem (lobby e ranking; o lobby também publica bot.solicitado, que o bots lê).
+#   Não guarda dado de ninguém: só as mensagens em trânsito (e, no grupo de consumo do bots,
+#   quais pedidos de bot ainda estão em jogo).
 #   Separados, um serviço que lê eventos nunca enxerga as partidas, e o Game continua jogando
 #   mesmo com o broker fora do ar (os eventos esperam na fila do game-redis).
 #
-# Para cada serviço novo (o bots, na fase 4), repita o padrão:
+# Para cada serviço novo, repita o padrão:
 # - o serviço entra na rede-servicos (para receber as requisições do gateway);
 # - se ele tiver banco, crie um container <servico>-db, uma rede rede-<servico>-db (internal)
 #   só com os dois, um volume <servico>-db-dados e variáveis <SERVICO>_DB_* no .env, como o
 #   lobby + lobby-db e o ranking + ranking-db abaixo;
 # - se ele publica ou lê eventos, entra também na rede-eventos e recebe EVENTOS_* como o game.
+# O bots segue o padrão sem banco: só rede-servicos e rede-eventos.
 # ---------------------------------------------------------------------------------------------
 
 # Nome fixo do projeto: os containers, as redes e os volumes ganham o prefixo "truco-online",
@@ -280,6 +286,39 @@ services:
       start_period: 30s
       start_interval: 2s
 
+  # Serviço de Bots: joga pelos assentos de bot (docs/guia-backend-mesa.md, seção 10.7). Lê o
+  # bot.solicitado do broker (rede-eventos) e conecta ao WebSocket do Game como um jogador
+  # comum, pela rede-servicos (ws://game:8000), sem passar pelo gateway. Não tem banco: os bots
+  # ativos ficam guardados no próprio broker, como pedidos ainda não confirmados (app/eventos.py).
+  bots:
+    build: ./services/bots
+    restart: unless-stopped
+    environment:
+      # O mesmo segredo dos outros serviços: o serviço assina o token de cada bot, e o Game confere.
+      JWT_SEGREDO: ${JWT_SEGREDO:?defina JWT_SEGREDO no .env (copie o .env.example)}
+      # Endereço interno do Game. Não é segredo, por isso fica aqui e não no .env.
+      GAME_WS_URL: ws://game:8000
+      EVENTOS_HOST: eventos
+      EVENTOS_PORTA: "6379"
+      EVENTOS_SENHA: ${EVENTOS_SENHA:?defina EVENTOS_SENHA no .env (copie o .env.example)}
+      # Opcional: com um valor, cada bot repete as mesmas escolhas nas mesmas situações.
+      BOTS_SEMENTE: ${BOTS_SEMENTE:-}
+    networks:
+      - rede-servicos
+      - rede-eventos
+    # O Game não está aqui: sem ele o serviço sobe, e os bots esperam e reconectam sozinhos.
+    depends_on:
+      eventos:
+        condition: service_healthy
+    # GET /saude responde 200 quando o serviço está no ar e alcança o broker.
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/saude', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+      start_interval: 2s
+
   # Banco do Game: estado das partidas. Só o serviço game chega até ele (rede-game-redis).
   # --appendonly yes grava cada mudança em disco (no volume): as partidas sobrevivem a um
   # reinício do container. A senha vem do .env; o REDISCLI_AUTH deixa o redis-cli do próprio
@@ -304,7 +343,7 @@ services:
 
   # Broker de eventos: Redis dedicado à comunicação entre os serviços, com Redis Streams.
   # O game publica partida.criada e partida.finalizada; o lobby lê partida.finalizada e publica
-  # bot.solicitado; o ranking lê partida.finalizada. Os bots entram na fase 4.
+  # bot.solicitado; o ranking lê partida.finalizada; o bots lê bot.solicitado.
   # Também grava em disco: um evento publicado espera no stream até o consumidor ler.
   eventos:
     image: redis:8.2-alpine
