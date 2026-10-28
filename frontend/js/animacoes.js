@@ -1,8 +1,9 @@
 // Animações da mesa.
 // A mesa continua sendo redesenhada inteira por renderizarMesa(estado) a cada estado recebido.
 // Este módulo não desenha nada nem conhece as regras do jogo: compara o estado anterior com o
-// novo para descobrir o que mudou (carta jogada, mão nova) e anima os elementos que a mesa
-// acabou de desenhar, partindo de onde as coisas estavam na tela antiga.
+// novo para descobrir o que mudou (carta jogada, mão nova, pedido de truco, rodada decidida,
+// placar) e anima os elementos que a mesa acabou de desenhar, partindo de onde as coisas estavam
+// na tela antiga.
 //
 // Uso, a cada estado recebido do servidor:
 //   const animar = prepararAnimacoes(anterior, novo, raiz); // antes de redesenhar: mede a tela antiga
@@ -12,20 +13,29 @@
 // - Só transform e opacity, pela Web Animations API (element.animate), sem bibliotecas.
 // - Nada espera uma animação terminar. Se outro estado chegar no meio, a mesa é redesenhada na
 //   hora e as animações somem junto com os elementos antigos: a tela vai direto para o novo.
+//   Só o aviso de truco fica na camada #efeitos, fora da mesa, para não sumir com um estado
+//   que só traz uma mensagem do chat; um pedido novo substitui o anterior.
 // - Sem estado anterior (primeiro estado de uma conexão: ao abrir a mesa, depois de um F5 ou
 //   de uma queda), nada é animado.
 // - Com prefers-reduced-motion ligado no sistema, nada se move: só fades curtíssimos.
 
-// Durações. A distribuição inteira (12 cartas no 2x2) leva 300 + 11 × 60 = 960 ms, menos que o
-// atraso mínimo dos bots (1 s) antes de jogar.
+// Durações. Todas ficam abaixo do atraso mínimo dos bots (1 s) antes de cada ação: a
+// distribuição inteira (12 cartas no 2x2) leva 300 + 11 × 60 = 960 ms.
 const DURACAO_MOVIMENTO_MS = 300; // carta indo para a mesa, cartas da mão se ajeitando
 const INTERVALO_DISTRIBUICAO_MS = 60; // entre uma carta e a seguinte, na distribuição
+const DURACAO_AVISO_TRUCO_MS = 1000; // o pedido em destaque, do surgimento até sumir
+const DURACAO_DESTAQUE_MS = 300; // cartas do time vencedor subindo, marcador da rodada pulsando
+const DURACAO_PLACAR_MS = 450; // contagem dos pontos
 const DURACAO_FADE_REDUZIDO_MS = 120; // com prefers-reduced-motion, no lugar dos movimentos
+
+// Os mesmos nomes do aviso da barra de ações (NOME_PEDIDO, em mesa.js).
+const TEXTO_PEDIDO = { 3: "Truco!", 6: "Seis!", 9: "Nove!", 12: "Doze!" };
 
 // Saída rápida e chegada suave.
 const CURVA_MOVIMENTO = "cubic-bezier(0.2, 0.7, 0.3, 1)";
 
 const movimentoReduzido = matchMedia("(prefers-reduced-motion: reduce)");
+const camadaEfeitos = document.getElementById("efeitos");
 
 // ---------- O que mudou entre dois estados ----------
 
@@ -41,11 +51,20 @@ function compararEstados(anterior, novo) {
   const mesmaMao = antes.numero === agora.numero;
   const indice = agora.rodadas.length - 1;
   const rodada = agora.rodadas[indice];
-  const rodadaAntes = antes.rodadas[indice];
+  const rodadaAntes = mesmaMao ? antes.rodadas[indice] : undefined;
+  // Pedido de truco que acabou de aparecer, ou que subiu de valor (alguém aumentou).
+  const pedido = agora.truco_pendente;
+  const pedidoAntes = mesmaMao ? antes.truco_pendente : null;
   return {
     maoNova: !mesmaMao && novo.status !== "encerrada",
     jogadas: mesmaMao ? (rodada?.jogadas ?? []).slice(rodadaAntes?.jogadas?.length ?? 0) : [],
     mesmaMao,
+    rodadaDecidida: mesmaMao && rodada?.vencedor_time && !rodadaAntes?.vencedor_time ? indice : null,
+    pedido: pedido && (!pedidoAntes || pedido.valor_proposto > pedidoAntes.valor_proposto) ? pedido : null,
+    // [time, pontos antes, pontos agora] de cada time que pontuou.
+    placar: ["A", "B"]
+      .filter((time) => anterior.placar[time] !== novo.placar[time])
+      .map((time) => [time, anterior.placar[time], novo.placar[time]]),
   };
 }
 
@@ -194,6 +213,72 @@ function distribuir(raiz, estado, reduzir) {
   });
 }
 
+// Rodada decidida: as cartas do time vencedor (já desenhadas em destaque pela mesa) sobem e o
+// contorno aparece, depois que a última carta chega; o marcador da rodada pulsa. No empate,
+// as cartas ficam como estão e só o marcador, cinza, pulsa: o estado não diz quais cartas
+// empataram.
+function destacarRodada(raiz, indice, atraso) {
+  const opcoes = { duration: DURACAO_DESTAQUE_MS, delay: atraso, easing: CURVA_MOVIMENTO, fill: "backwards" };
+  for (const jogada of raiz.querySelectorAll(".jogada.vencedora")) {
+    jogada.animate([{ translate: "0 0" }, { translate: getComputedStyle(jogada).translate }], opcoes);
+    jogada.animate([{ opacity: 0 }, { opacity: 1 }], { ...opcoes, pseudoElement: "::after" });
+  }
+  raiz.querySelectorAll(".marcadores .marcador")[indice]?.animate(
+    [{ transform: "scale(1)" }, { transform: "scale(1.45)" }, { transform: "scale(1)" }],
+    { duration: DURACAO_DESTAQUE_MS, delay: atraso },
+  );
+}
+
+// Pontos de um time: o número conta do valor anterior até o novo, crescendo um instante. Vale
+// para o placar da mesa e para o da tela de fim de partida.
+function contarPontos(raiz, time, de, ate, atraso) {
+  const seletor = `.placar-time.time-${time.toLowerCase()} .pontos, .fim-time.time-${time.toLowerCase()} .pontos`;
+  for (const numero of raiz.querySelectorAll(seletor)) {
+    numero.textContent = String(de);
+    const inicio = performance.now() + atraso;
+    const contar = (instante) => {
+      // Mesa redesenhada no meio da contagem: o número novo já está certo.
+      if (!numero.isConnected) return;
+      const progresso = Math.min(1, Math.max(0, (instante - inicio) / DURACAO_PLACAR_MS));
+      numero.textContent = String(Math.round(de + (ate - de) * progresso));
+      if (progresso < 1) requestAnimationFrame(contar);
+    };
+    requestAnimationFrame(contar);
+    numero.animate(
+      [{ transform: "scale(1)" }, { transform: "scale(1.35)", offset: 0.4 }, { transform: "scale(1)" }],
+      { duration: DURACAO_PLACAR_MS, delay: atraso, easing: "ease-out" },
+    );
+  }
+}
+
+// Pedido de truco: o nome aparece grande no centro da mesa, na camada de efeitos, e some. Não
+// recebe cliques; o aviso da barra de ações continua lá.
+function anunciarPedido(raiz, pedido, reduzir) {
+  const centroMesa = raiz.querySelector(".centro");
+  if (!camadaEfeitos || !centroMesa) return;
+  camadaEfeitos.querySelector(".aviso-pedido")?.remove();
+  const { x, y } = centroDe(centroMesa.getBoundingClientRect());
+  const aviso = document.createElement("p");
+  aviso.className = `aviso-pedido time-${pedido.pedido_por_time.toLowerCase()}`;
+  aviso.textContent = TEXTO_PEDIDO[pedido.valor_proposto] ?? "Truco!";
+  aviso.style.left = `${x}px`;
+  aviso.style.top = `${y}px`;
+  camadaEfeitos.append(aviso);
+
+  const centralizar = "translate(-50%, -50%)";
+  const quadros = reduzir
+    ? [{ opacity: 0 }, { opacity: 1, offset: 0.1 }, { opacity: 1, offset: 0.9 }, { opacity: 0 }]
+    : [
+        { transform: `${centralizar} scale(0.4)`, opacity: 0 },
+        { transform: `${centralizar} scale(1.08)`, opacity: 1, offset: 0.2 },
+        { transform: `${centralizar} scale(1)`, opacity: 1, offset: 0.32 },
+        { transform: `${centralizar} scale(1)`, opacity: 1, offset: 0.8 },
+        { transform: `${centralizar} scale(1.12)`, opacity: 0 },
+      ];
+  const animacao = aviso.animate(quadros, { duration: DURACAO_AVISO_TRUCO_MS, easing: "ease-out", fill: "forwards" });
+  animacao.onfinish = () => aviso.remove();
+}
+
 // ---------- Entrada ----------
 
 // Chamada antes de redesenhar a mesa com o estado novo: descobre o que mudou e mede, na tela
@@ -220,6 +305,15 @@ export function prepararAnimacoes(anterior, novo, raiz) {
       if (reduzir || !origens[i]) aparecer(carta);
       else voarParaMesa(carta, origens[i]);
     });
-    if (!reduzir && mudou.jogadas.length > 0) ajeitarMinhaMao(raiz, meuAssento, minhaMao);
+
+    if (mudou.pedido) anunciarPedido(raiz, mudou.pedido, reduzir);
+    // Com o movimento reduzido, o destaque da rodada e os pontos novos aparecem direto.
+    if (reduzir) return;
+
+    if (mudou.jogadas.length > 0) ajeitarMinhaMao(raiz, meuAssento, minhaMao);
+    // O que depende da carta que acabou de ser jogada começa quando ela chega ao centro.
+    const chegada = mudou.jogadas.length > 0 ? DURACAO_MOVIMENTO_MS : 0;
+    if (mudou.rodadaDecidida !== null) destacarRodada(raiz, mudou.rodadaDecidida, chegada);
+    for (const [time, de, ate] of mudou.placar) contarPontos(raiz, time, de, ate, chegada);
   };
 }
