@@ -18,8 +18,8 @@ const USAR_MOCK = false;
 // SERVIÇOS LOBBY E RANKING", no fim do arquivo). Cada serviço tem a sua chave, para dar
 // para ligar um de cada vez, à medida que ficarem prontos.
 // =====================================================================================
-const USAR_MOCK_LOBBY = true;
-const USAR_MOCK_RANKING = true;
+const USAR_MOCK_LOBBY = false;
+const USAR_MOCK_RANKING = false;
 
 const PREFIXO = "/api";
 
