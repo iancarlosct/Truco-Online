@@ -1,0 +1,20 @@
+# Dependências do serviço de Bots, com as versões fixas para todos instalarem o mesmo.
+# A estratégia (app/estrategia.py e app/cartas.py) não usa nenhuma: é Python puro.
+
+# Só a rota /saude, para o healthcheck do Docker Compose. O serviço não tem outras rotas.
+fastapi==0.162.0
+uvicorn==0.54.0
+
+# Cliente WebSocket: o bot conecta à mesa do Game como a tela faz. A mesma versão que o
+# uvicorn[standard] instala no Game.
+websockets==17.3
+
+# Broker de eventos (Redis Streams): lê bot.solicitado.
+redis==8.1.0
+
+# Token (JWT) que o bot apresenta ao Game. No código, o import é "jwt".
+pyjwt==2.15.1
+
+# Testes (rodam dentro do container: docker compose run --rm bots pytest)
+pytest==9.2.0
+httpx2==2.16.0  # usado pelo TestClient do FastAPI
