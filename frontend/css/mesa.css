@@ -310,6 +310,13 @@ body {
   outline: none;
 }
 
+/* Com o movimento reduzido no sistema, a carta sobe sem deslizar */
+@media (prefers-reduced-motion: reduce) {
+  .carta-mao {
+    transition: filter 0.15s ease;
+  }
+}
+
 /* ---------- Centro: cartas jogadas, vira e rodadas ---------- */
 
 /* Ponto de referência no meio da área livre; os filhos se posicionam a partir dele */
@@ -359,6 +366,11 @@ body {
 .jogada.pos-direita {
   --dx: calc(var(--l) * 0.8);
   --giro: 6deg;
+}
+
+/* Carta a caminho do centro (js/animacoes.js): passa por cima das mãos e das plaquinhas */
+.jogada.voando {
+  z-index: 2;
 }
 
 .rotulo-mesa {

@@ -6,6 +6,7 @@
 // começa) e conversa com o Game pelo ws.js. Até o primeiro estado chegar, mostra só uma espera.
 // Sem ?partida=, mostra os estados falsos do seletor de desenvolvimento.
 
+import { prepararAnimacoes } from "../animacoes.js";
 import { exigirLogin } from "../auth.js";
 import { criarCarta, criarVerso, proximaManilha } from "../cartas.js";
 import * as mocks from "../mock/estados.js";
@@ -50,6 +51,9 @@ const ui = {
   erro: null, // mensagem do último erro do servidor, enquanto estiver na tela
   confirmandoSaida: false,
   focarChave: null, // controle (data-chave) que recebe o foco no próximo desenho
+  // O próximo estado é o primeiro desta conexão (ao abrir a mesa, depois de um F5 ou de uma
+  // queda): é desenhado direto, sem animação.
+  primeiroEstado: true,
 };
 let temporizadorErro = null;
 
@@ -189,6 +193,7 @@ function criarMaoOculta(quantidade) {
 // Jogador na mesa: plaquinha (time, nome, selos) + a mão já montada.
 function criarJogador(jogador, { posicao, naVez, souEu, mao }) {
   const raiz = el("div", `jogador pos-${posicao} ${classeTime(jogador.time)}`);
+  raiz.dataset.assento = jogador.assento;
   if (naVez) raiz.classList.add("na-vez");
 
   const plaquinha = el("div", "plaquinha");
@@ -231,6 +236,7 @@ function criarCentro(maoAtual, ctx) {
   const jogadas = el("div", "jogadas");
   for (const jogada of rodadaAtual?.jogadas ?? []) {
     const item = el("div", `jogada pos-${posicaoDe(jogada.assento)}`);
+    item.dataset.assento = jogada.assento;
     item.append(jogada.coberta || !jogada.carta ? criarVerso() : criarCarta(jogada.carta));
     jogadas.append(item);
   }
@@ -618,12 +624,18 @@ function receberEstado(estado) {
     const eu = estado.jogadores.find((j) => j.assento === estado.meu_assento);
     anunciar(`Fim de partida. ${tituloDoFim(estado, eu.time)}`);
   }
+  // As animações comparam o estado anterior com o novo: medem a mesa antiga antes de redesenhar
+  // e animam a nova logo depois (js/animacoes.js).
+  const animar = prepararAnimacoes(ui.primeiroEstado ? null : estadoAtual, estado, app);
+  ui.primeiroEstado = false;
   renderizarMesa(estado);
+  animar();
 }
 
 function mudarConexao(situacao, motivo) {
   const anterior = ui.conexao;
   ui.conexao = situacao;
+  if (situacao === "conectado") ui.primeiroEstado = true;
   if (situacao === "recusada") {
     ui.motivoRecusa = motivo;
     anunciar(`${motivo} Voltando ao lobby…`);
