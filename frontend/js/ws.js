@@ -26,11 +26,15 @@ const ESPERA_MAXIMA_MS = 10000;
 const TOKEN_INVALIDO = 4401;
 const FORA_DA_PARTIDA = 4403;
 const PARTIDA_INEXISTENTE = 4404;
+// O mesmo jogador abriu a partida em outra aba: vale a conexão mais recente, e o Game fecha
+// esta. Se esta aba reconectasse, derrubaria a outra, e as duas ficariam se derrubando.
+const CONEXAO_SUBSTITUIDA = 4409;
 
 // Texto mostrado ao jogador quando a partida o recusa.
 const MOTIVO_RECUSA = {
   [FORA_DA_PARTIDA]: "Você não faz parte desta partida.",
   [PARTIDA_INEXISTENTE]: "Esta partida não existe.",
+  [CONEXAO_SUBSTITUIDA]: "Esta partida foi aberta em outra aba.",
 };
 
 // ws://<endereço da página>/ws/partidas/{partida_id}?token=<jwt>, ou wss:// com HTTPS.
@@ -48,7 +52,7 @@ function enderecoDaPartida(partidaId, token) {
 //     "conectando"    primeira tentativa
 //     "conectado"     conexão aberta (o estado chega logo em seguida)
 //     "reconectando"  caiu, ou não abriu, e vai tentar de novo
-//     "recusada"      4403 ou 4404: a partida não aceita este jogador; vem com o motivo
+//     "recusada"      4403, 4404 ou 4409: a partida não aceita esta conexão; vem com o motivo
 // O 4401 (token recusado) não chega à tela: encerra a sessão e volta para o login, como o 401
 // das rotas HTTP.
 export function conectarPartida(partidaId, { aoReceberEstado, aoReceberErro, aoMudarConexao }) {

@@ -1,0 +1,17 @@
+# Dependências do serviço Game, com as versões fixas para todos instalarem o mesmo.
+# O motor de regras (pacote engine) não usa nenhuma: é Python puro.
+
+# API e WebSocket. O [standard] traz a biblioteca de WebSocket do Uvicorn; sem ela, a conexão
+# falha e o log mostra "No supported WebSocket library detected".
+fastapi==0.162.0
+uvicorn[standard]==0.54.0
+
+# Os dois Redis: o banco do Game (game-redis) e o broker de eventos (eventos).
+redis==8.1.0
+
+# Token (JWT). No código, o import é "jwt".
+pyjwt==2.15.1
+
+# Testes (rodam dentro do container: docker compose run --rm game pytest)
+pytest==9.2.0
+httpx2==2.16.0  # usado pelo TestClient do FastAPI
