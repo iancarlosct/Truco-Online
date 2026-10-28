@@ -202,6 +202,16 @@ export function obterRanking() {
   return requisitar("GET", "/ranking");
 }
 
+// GET /api/ranking/jogadores/{id}. Devolve o histórico do jogador (RF18):
+//   { usuario_id, nome, posicao, vitorias, derrotas, partidas,
+//     ultimas_partidas: [{ partida_id, formato, encerrada_em, time, venceu, placar_final: { A, B },
+//                          times: { A: [{ assento, usuario_id, nome, bot }], B: [...] } }] }
+// As últimas partidas vêm da mais recente para a mais antiga (até 10). Quem nunca jogou
+// responde 404 jogador_nao_encontrado.
+export function obterJogador(id) {
+  return requisitar("GET", `/ranking/jogadores/${encodeURIComponent(id)}`);
+}
+
 // =====================================================================================
 // PROVISÓRIO — BASE DOS MOCKS (Auth, Lobby e Ranking). REMOVER junto com o último deles.
 // =====================================================================================

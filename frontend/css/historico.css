@@ -1,0 +1,452 @@
+/* Tela do histórico de um jogador: nome, estatísticas e últimas partidas.
+   Somente desktop (largura mínima de 1200px), como o lobby, com o mesmo cabeçalho e o mesmo
+   feltro da lista de salas (lobby.css). */
+
+html {
+  overflow: auto;
+}
+
+body {
+  min-width: 1200px;
+}
+
+/* ---------- Estrutura geral ---------- */
+
+.tela {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  height: 100vh;
+  min-height: 680px;
+}
+
+/* ---------- Cabeçalho (o mesmo do lobby) ---------- */
+
+.cabecalho {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 20px;
+  border-bottom: 1px solid var(--painel-borda);
+  background: var(--painel);
+}
+
+.marca {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.titulo {
+  font-family: var(--fonte-titulo);
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.subtitulo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--texto-suave);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.subtitulo::before {
+  content: "";
+  width: 24px;
+  height: 1px;
+  background: rgba(217, 180, 91, 0.6);
+}
+
+.usuario {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.usuario-nome {
+  max-width: 220px;
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---------- Botões (os mesmos do lobby) ---------- */
+
+.botao {
+  display: inline-block;
+  min-width: 84px;
+  padding: 7px 14px;
+  border: 1px solid var(--painel-borda);
+  border-radius: var(--raio);
+  background: var(--painel-claro);
+  color: var(--texto);
+  font-weight: 600;
+  text-align: center;
+  text-decoration: none;
+  transition: filter 0.15s ease;
+}
+
+.botao:hover {
+  filter: brightness(1.15);
+}
+
+.botao:focus-visible {
+  outline: 2px solid var(--dourado);
+  outline-offset: 2px;
+}
+
+/* ---------- Área principal: o feltro da lista de salas ---------- */
+
+.principal {
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.historico {
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+  min-height: 100%;
+  padding: 30px max(34px, calc((100% - 980px) / 2)) 44px;
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 .17 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"),
+    radial-gradient(ellipse at 50% 30%, var(--feltro-claro) 0%, var(--feltro) 50%, var(--feltro-escuro) 100%);
+  outline: 1px dashed rgba(251, 248, 241, 0.13);
+  outline-offset: -12px;
+}
+
+.carregando {
+  color: rgba(251, 248, 241, 0.75);
+}
+
+/* ---------- Perfil: de quem é o histórico ---------- */
+
+.perfil {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+/* Letras espaçadas com o filete dourado, como o subtítulo */
+.perfil-rotulo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: rgba(251, 248, 241, 0.75);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.perfil-rotulo::before {
+  content: "";
+  width: 24px;
+  height: 1px;
+  background: rgba(217, 180, 91, 0.6);
+}
+
+.perfil-titulo {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+  font-family: var(--fonte-titulo);
+  font-size: 34px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.perfil-nome {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.perfil-titulo .voce {
+  flex: none;
+  color: rgba(251, 248, 241, 0.7);
+  font-family: var(--fonte-texto);
+  font-size: 15px;
+  font-weight: 400;
+}
+
+.perfil-posicao {
+  color: var(--dourado);
+  font-weight: 700;
+}
+
+/* ---------- Estatísticas: cartões creme, como as salas do lobby ---------- */
+
+.estatisticas {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.estatistica {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 18px 12px 16px;
+  border: 1px solid var(--borda-carta);
+  border-radius: 14px;
+  background: var(--creme);
+  color: var(--tinta);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.4),
+    0 10px 24px rgba(0, 0, 0, 0.35);
+}
+
+/* Filete dourado por dentro da borda, como nos cartões das salas */
+.estatistica::before,
+.cartao-partidas::before {
+  content: "";
+  position: absolute;
+  inset: 6px;
+  border: 1px solid rgba(168, 134, 47, 0.45);
+  border-radius: 9px;
+  pointer-events: none;
+}
+
+.estatistica-valor {
+  font-family: var(--fonte-titulo);
+  font-size: 38px;
+  font-weight: 700;
+  line-height: 1.05;
+  font-variant-numeric: tabular-nums;
+}
+
+.estatistica-rotulo {
+  color: var(--tinta-suave);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+/* ---------- Últimas partidas: uma súmula sobre um cartão creme ---------- */
+
+.partidas {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.secao-titulo {
+  font-family: var(--fonte-titulo);
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.cartao-partidas {
+  position: relative;
+  padding: 10px 14px 12px;
+  border: 1px solid var(--borda-carta);
+  border-radius: 14px;
+  background: var(--creme);
+  color: var(--tinta);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.4),
+    0 10px 24px rgba(0, 0, 0, 0.35);
+}
+
+.tabela-partidas {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 14px;
+}
+
+.tabela-partidas th {
+  padding: 10px 10px 8px;
+  color: var(--tinta-suave);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-align: left;
+  text-transform: uppercase;
+}
+
+.tabela-partidas td {
+  padding: 10px;
+  border-top: 1px solid var(--creme-escuro);
+  vertical-align: middle;
+}
+
+.tabela-partidas .data {
+  width: 118px;
+}
+
+.tabela-partidas .formato {
+  width: 92px;
+}
+
+.tabela-partidas .placar {
+  width: 100px;
+}
+
+.tabela-partidas .resultado {
+  width: 116px;
+  text-align: right;
+}
+
+.data time {
+  display: flex;
+  flex-direction: column;
+}
+
+.data-dia {
+  font-weight: 600;
+}
+
+.data-hora {
+  color: var(--tinta-suave);
+  font-size: 12px;
+}
+
+td.formato {
+  font-family: var(--fonte-titulo);
+  font-size: 18px;
+  font-weight: 700;
+}
+
+/* Parceiro e adversários: um por linha, cada nome cortado com reticências */
+.jogadores {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.jogador {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.nome-jogador {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sem-jogador {
+  color: var(--tinta-suave);
+}
+
+.selo-bot {
+  flex: none;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--tinta);
+  color: var(--creme);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+td.placar {
+  font-family: var(--fonte-titulo);
+  font-size: 18px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.selo-resultado {
+  display: inline-block;
+  padding: 3px 10px;
+  border: 1px solid var(--tinta-vermelha);
+  border-radius: 999px;
+  color: var(--tinta-vermelha);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.vitoria .selo-resultado {
+  border-color: var(--verde-acao);
+  background: var(--verde-acao);
+  color: #fff;
+}
+
+/* ---------- Sem partidas e erro ---------- */
+
+/* Cartas viradas em leque e um convite, como a lista de salas vazia do lobby */
+.historico-vazio {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  max-width: 460px;
+  margin: 40px auto 0;
+  text-align: center;
+}
+
+.cartas-viradas {
+  --l: 72px;
+  display: flex;
+  justify-content: center;
+  margin-bottom: 22px;
+}
+
+.cartas-viradas .carta {
+  width: var(--l);
+  height: calc(var(--l) * 1.4);
+  max-width: none;
+  border-radius: calc(var(--l) * 0.052);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.4),
+    0 4px 10px rgba(0, 0, 0, 0.3);
+  user-select: none;
+}
+
+.cartas-viradas .carta:nth-child(1) {
+  transform: translate(22px, 8px) rotate(-14deg);
+}
+
+.cartas-viradas .carta:nth-child(2) {
+  position: relative;
+  z-index: 1;
+}
+
+.cartas-viradas .carta:nth-child(3) {
+  transform: translate(-22px, 8px) rotate(14deg);
+}
+
+.historico-vazio-titulo {
+  font-family: var(--fonte-titulo);
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.historico-vazio-texto {
+  color: rgba(251, 248, 241, 0.78);
+}
+
+.historico-erro {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  max-width: 520px;
+  padding: 14px 16px;
+  border: 1px solid var(--painel-borda);
+  border-left: 4px solid var(--vermelho-acao);
+  border-radius: var(--raio);
+  background: rgba(23, 25, 29, 0.92);
+}

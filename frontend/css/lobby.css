@@ -80,8 +80,10 @@ body {
 
 /* ---------- Botões ---------- */
 
-/* Botão da interface escura: o mesmo visual do .botao da mesa (mesa.css) */
+/* Botão da interface escura: o mesmo visual do .botao da mesa (mesa.css). Vale também para os
+   links com cara de botão, como o "Meu histórico" do cabeçalho. */
 .botao {
+  display: inline-block;
   min-width: 84px;
   padding: 7px 14px;
   border: 1px solid var(--painel-borda);
@@ -89,6 +91,8 @@ body {
   background: var(--painel-claro);
   color: var(--texto);
   font-weight: 600;
+  text-align: center;
+  text-decoration: none;
   transition: background-color 0.15s ease, border-color 0.15s ease, filter 0.15s ease, opacity 0.15s ease;
 }
 
@@ -740,14 +744,37 @@ body {
   color: var(--dourado);
 }
 
-.ranking-tabela .nome {
+/* O nome é um link para o histórico do jogador; longo, é cortado com reticências, e o "(você)"
+   continua à vista */
+.celula-nome {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+
+.ranking-tabela .nome-jogador {
+  min-width: 0;
   overflow: hidden;
+  color: inherit;
+  text-decoration: none;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.ranking-tabela .nome-jogador:hover {
+  color: var(--dourado);
+  text-decoration: underline;
+}
+
+.ranking-tabela .nome-jogador:focus-visible {
+  border-radius: 2px;
+  outline: 2px solid var(--dourado);
+  outline-offset: -2px;
+}
+
 .ranking-tabela .voce {
-  margin-left: 6px;
+  flex: none;
   color: var(--texto-suave);
   font-size: 12px;
 }

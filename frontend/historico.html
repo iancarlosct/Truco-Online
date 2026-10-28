@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=1200">
+  <title>Truco Online — Histórico</title>
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/historico.css">
+</head>
+<body>
+  <!-- Começa escondida: historico.js só mostra a tela depois de conferir que há sessão -->
+  <div class="tela" id="tela" hidden>
+    <header class="cabecalho">
+      <div class="marca">
+        <h1 class="titulo">Truco Online</h1>
+        <p class="subtitulo">Truco paulista</p>
+      </div>
+      <!-- Nome do usuário e o link de volta ao lobby, desenhados por historico.js -->
+      <div class="usuario" id="usuario"></div>
+    </header>
+
+    <!-- O histórico (ou a espera, o erro e o estado vazio) é desenhado aqui por historico.js -->
+    <main class="principal" id="conteudo" aria-live="polite"></main>
+  </div>
+  <script type="module" src="js/paginas/historico.js"></script>
+</body>
+</html>

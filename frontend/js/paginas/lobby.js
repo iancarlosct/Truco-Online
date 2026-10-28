@@ -23,6 +23,7 @@ import { criarVerso } from "../cartas.js";
 
 const PAGINA_LOGIN = "index.html";
 const PAGINA_MESA = "mesa.html";
+const PAGINA_HISTORICO = "historico.html";
 
 // Intervalo da atualização periódica e tempo que um aviso fica na tela.
 const INTERVALO_ATUALIZACAO_MS = 3000;
@@ -191,11 +192,19 @@ function renderizar() {
   else renderizarLista();
 }
 
-// Nome do usuário logado e botão Sair, no cabeçalho.
+// Endereço do histórico de um jogador (historico.html); sem o id, o do próprio usuário.
+function enderecoDoHistorico(usuarioId) {
+  return usuarioId ? `${PAGINA_HISTORICO}?jogador=${encodeURIComponent(usuarioId)}` : PAGINA_HISTORICO;
+}
+
+// Nome do usuário logado, o link "Meu histórico" e o botão Sair, no cabeçalho.
 function renderizarUsuario() {
   const nome = el("span", "usuario-nome", usuario.nome);
   nome.title = usuario.email ?? "";
-  trocarConteudo(areaUsuario, nome, botaoDeAcao("logout", "Sair", "botao", sairDaConta));
+  const historico = el("a", "botao", "Meu histórico");
+  historico.href = enderecoDoHistorico();
+  historico.dataset.chave = "historico";
+  trocarConteudo(areaUsuario, nome, historico, botaoDeAcao("logout", "Sair", "botao", sairDaConta));
 }
 
 // ---------- Vista 1: lista de salas ----------
@@ -488,12 +497,18 @@ function criarTabelaRanking(linhas) {
   return tabela;
 }
 
+// O nome de cada jogador leva ao histórico dele.
 function criarLinhaRanking(linha) {
   const souEu = linha.usuario_id === usuario.id;
   const tr = el("tr", souEu ? "eu" : "");
   const nome = el("td", "nome");
-  nome.append(el("span", "nome-jogador", linha.nome));
-  if (souEu) nome.append(el("span", "voce", "(você)"));
+  const celula = el("div", "celula-nome");
+  const link = el("a", "nome-jogador", linha.nome);
+  link.href = enderecoDoHistorico(linha.usuario_id);
+  link.title = linha.nome;
+  celula.append(link);
+  if (souEu) celula.append(el("span", "voce", "(você)"));
+  nome.append(celula);
   tr.append(
     el("td", "posicao", `${linha.posicao}º`),
     nome,
