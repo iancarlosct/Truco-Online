@@ -493,7 +493,7 @@ nome = conteudo["nome"]
 - `jwt.InvalidTokenError` cobre todos os casos: assinatura errada, texto que não é um token e token vencido. Para tratar o vencido à parte, capture antes `jwt.ExpiredSignatureError`.
 - Passe sempre `algorithms=["HS256"]`. Sem esse argumento o PyJWT se recusa a validar.
 - Nenhum serviço chama o Auth nem o banco do Auth para validar um token.
-- Os bots também entram no Game com um token, o "token de serviço" do contrato. Quem emite esse token ainda não foi definido (P14).
+- Os bots também entram no Game com um token, o "token de serviço" do contrato. Quem o emite é o próprio serviço de Bots, com o mesmo `JWT_SEGREDO` e o `sub` no formato `bot-<partida_id>-<assento>` (P14; [guia da mesa](guia-backend-mesa.md), seções 10.5 e 10.7).
 
 ## 7. Banco
 

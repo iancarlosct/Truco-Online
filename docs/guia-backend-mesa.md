@@ -8,6 +8,7 @@ Este guia é para quem vai implementar o serviço Game em Python com FastAPI. El
 - **Decisões de protocolo de 20/10/2026**: só as mensagens `estado` e `erro` do servidor, o campo `status`, os códigos de erro e de fechamento, a mão do parceiro na mão de onze, a primeira resposta do time no 2x2, a criação da rodada e a pausa entre as mãos. Elas aparecem como regras no texto e ainda não estão no documento de contratos. Os pontos em aberto que elas fecham estão marcados como resolvidos na seção 9.
 - **Documento de requisitos e contratos** (link no [README](../README.md)): usado para o que o código ainda não cobre, como o endereço do WebSocket.
 - **Serviço Game de verdade** (`services/game/`, branch `feature/backend-game`, 28/10/2026): o motor de regras e a camada de serviço seguem este guia. O que a implementação decidiu está na seção 10, e os pontos em aberto que ela fechou (P12, P13, P17, P19, P20, P21 e P22) estão marcados como resolvidos na seção 9. Tudo foi conferido com os testes do serviço e com uma partida 1x1 completa na tela real, entre dois usuários do Auth, passando pelo gateway.
+- **Serviço de Bots** (`services/bots/`, branch `feature/backend-bots`, 28/10/2026): o bot é um cliente do Game como a tela, e a seção 10.7 registra como ele usa este protocolo. Conferido com os testes do serviço, com partidas 1x1 e 2x2 criadas pelo Lobby e com uma partida 1x1 na tela real, de um usuário do Auth contra um bot.
 
 Quando os dois não batem, ou quando o código depende de algo que não está escrito em lugar nenhum, o texto traz um código como **P3**. Ele aponta para o item correspondente da seção 9, Pontos em aberto.
 
@@ -77,7 +78,7 @@ Na ordem recomendada. Cada etapa termina em algo que dá para ver funcionando. O
 - [x] Carta coberta a partir da segunda rodada.
 - [x] Mão de onze: `tipo`, `aguardando_decisao_mao_de_onze` e `decidir_mao_de_onze` (P4), com a mão do parceiro para o time com 11 (seção 4.3).
 - [x] Mão de ferro (P13).
-- [ ] Bots conectando como clientes comuns. O Game já aceita o token dos bots (seção 10.5); falta o serviço de Bots, na fase 4.
+- [x] Bots conectando como clientes comuns: o serviço de Bots (seção 10.7), com o token da seção 10.5.
 - [x] Volta do jogador depois de uma queda: a nova conexão recebe o estado atual (seção 6.6; P20).
 
 ## 3. Conexão WebSocket
@@ -553,7 +554,7 @@ Não existem mensagens próprias para esses momentos. As que o documento de cont
 
 ### 6.7 Bots
 
-Os bots conectam no mesmo endereço, recebem o mesmo tipo de `estado` (na visão deles) e enviam as mesmas mensagens da seção 5. Para a tela, um bot é só um jogador com `"bot": true`, que ganha o selo "BOT". O token que o bot usa e como o Game o confere estão na seção 10.5.
+Os bots conectam no mesmo endereço, recebem o mesmo tipo de `estado` (na visão deles) e enviam as mesmas mensagens da seção 5. Para a tela, um bot é só um jogador com `"bot": true`, que ganha o selo "BOT". O token que o bot usa e como o Game o confere estão na seção 10.5; o serviço que joga pelos bots, na seção 10.7. O Game não trata os bots de um jeito diferente: as mesmas regras, a mesma ordem e as mesmas recusas valem para eles.
 
 ## 7. Exemplo mínimo em FastAPI
 
@@ -1017,7 +1018,7 @@ Para ver os eventos publicados: `docker compose exec eventos redis-cli XRANGE pa
 
 ### 10.5 Bots: como o Game identifica e autentica
 
-Seguindo a proposta do grupo, o serviço de Bots (fase 4) assina o próprio token, sem passar pelo Auth:
+Seguindo a proposta do grupo, o serviço de Bots assina o próprio token, sem passar pelo Auth:
 
 - HS256, com o mesmo `JWT_SEGREDO` dos outros serviços.
 - `sub` no formato `bot-<partida_id>-<assento>`, por exemplo `bot-98b32790-8440-491c-a662-b983693b2411-1`. O `partida_id` tem hífens (é um UUID): o assento é o número depois do último hífen.
@@ -1027,7 +1028,7 @@ O bot conecta como um jogador, em `/ws/partidas/{partida_id}?token=<jwt>`. Como 
 
 Por que esse formato: o `sub` de um usuário é sempre um UUID, então um `sub` que começa com `bot-` nunca se confunde com um jogador; e o próprio token diz a partida e o assento, sem campo extra e sem consultar outro serviço. A conferência já está no Game (`app/seguranca.py`), com testes.
 
-Nesta fase ninguém joga pelos bots: numa partida com bot, a vez do bot fica parada até a fase 4.
+Quem assina esse token e joga pelos bots é o serviço de Bots, desde a fase 4 (seção 10.7). Ele assina um token novo a cada conexão, válido por 10 minutos: o Game só confere o token ao conectar.
 
 ### 10.6 Divergências e acréscimos em relação às seções anteriores
 
@@ -1037,3 +1038,59 @@ Nesta fase ninguém joga pelos bots: numa partida com bot, a vez do bot fica par
 - **`POST /interno/partidas` responde 201.** O guia do lobby pede só o corpo `{"partida_id"}`; o exemplo do Lobby aceita qualquer status 2xx.
 - **`partida.finalizada` traz `assento` e `bot`** em cada jogador de `times`, além do proposto.
 - **Partida parada por 7 dias é apagada** do `game-redis`; depois disso, quem tentar conectar recebe 4404.
+
+### 10.7 O serviço de Bots
+
+O serviço de Bots (`services/bots/`, fase 4) joga pelos assentos de bot. Ele não importa nada do Game, nem o motor de regras: para o Game, cada bot é um cliente da mesa como a tela, que conecta ao WebSocket, recebe só a própria visão do `estado` e envia as mensagens da seção 5. Ele não acessa o `game-redis` nem nenhum banco.
+
+| Parte | Onde | O que faz |
+|---|---|---|
+| Pedidos | `app/eventos.py` | Lê o `bot.solicitado` do broker, com o grupo `bots` ([guia do lobby](guia-backend-lobby.md), seção 11.3), e cria um bot para cada pedido. Todos os bots rodam no mesmo processo, cada um numa tarefa do asyncio. |
+| Bot | `app/bot.py` | A conexão com a mesa: recebe o `estado`, pergunta à estratégia o que fazer, espera e envia. Trata as quedas e os fechamentos. |
+| Estratégia | `app/estrategia.py`, `app/cartas.py` | Python puro, sem rede: recebe o `estado` e devolve a mensagem a enviar, ou nada. Comentada para quem está começando. |
+| Token | `app/seguranca.py` | O token da seção 10.5. |
+| Saúde | `app/main.py` | `GET /saude`, só para o healthcheck do Docker Compose: 200 com o broker no ar, com o número de bots jogando. O serviço não tem outras rotas, não abre porta no computador e não passa pelo gateway. |
+
+**Conexão.** O bot conecta em `ws://game:8000/ws/partidas/{partida_id}?token=<jwt>`, pela `rede-servicos`, com um token novo a cada conexão. Ao conectar, o Game manda o estado atual (seção 6.6), e é a partir dele que o bot joga: vale para a primeira conexão, para uma reconexão e para a volta depois de um reinício do serviço.
+
+**Ritmo.** Antes de cada ação, o bot espera de 1 a 2 segundos, sorteados, para parecer um jogador e a tela das pessoas acompanhar cada jogada. Enquanto espera, continua lendo as mensagens: se o estado mudar, ele decide de novo. Ele age uma vez só em cada momento da partida (o estado sem o chat): uma mensagem de chat, que reenvia o mesmo estado, não o faz jogar de novo.
+
+**Fechamentos e quedas** (seção 3.4):
+
+| O Game fecha com | O bot |
+|---|---|
+| 4403 ou 4404 | Desiste da partida e registra no log. O pedido é confirmado no broker. |
+| 4409 | Sai sem reconectar: outra conexão entrou no assento dele. O pedido é confirmado. |
+| 4401 | Registra um erro (o `JWT_SEGREDO` dele é diferente do do Game) e continua tentando: corrigido o `.env`, volta a jogar. |
+| Qualquer outro, ou a conexão não abre | Tenta de novo, esperando 1, 2, 4 e 8 segundos e, daí em diante, 10, o mesmo ritmo da tela. |
+
+Quando chega o `estado` com `"status": "encerrada"`, o bot fecha a conexão (1000) e o pedido dele é confirmado no broker. Uma ação recusada com `erro` não deveria acontecer, porque a estratégia só escolhe jogadas válidas. Se acontecer, o bot registra no log e tenta uma vez uma jogada simples (carta aberta, sem truco).
+
+**Sem banco.** O grupo `bots` do Redis Streams guarda quais pedidos ainda não foram confirmados, e o serviço só confirma um pedido quando o bot dele termina. Os pedidos pendentes são, então, a lista dos bots ativos. Se o serviço cair ou reiniciar no meio de uma partida, ele relê os seus pendentes ao subir (consumidor de nome fixo, `bots-1`) e põe esses bots para jogar de novo, sem nenhum banco próprio. O mesmo pedido repetido (o Lobby reenvia se cair na entrega) é reconhecido pelo `partida_id` e o `assento`: com o bot ainda jogando, ou já terminado, a mensagem repetida é confirmada sem criar outro bot.
+
+**Quem responde pelo time no 2x2.** Vale a primeira resposta do time (seções 5.3 e 5.4). Para o bot não passar na frente de uma pessoa nem responder junto com outro bot:
+
+- com um parceiro humano, o bot não responde ao truco nem decide a mão de onze: deixa para a pessoa. Na própria vez, ele joga e pede truco normalmente;
+- com um parceiro bot, responde só o de menor assento;
+- no 1x1, o bot responde sempre.
+
+**Estratégia do nível `"padrao"`**, o único por enquanto (`app/estrategia.py` explica cada regra):
+
+- Força das cartas como na seção 10.2: 4, 5, 6, 7, Q, J, K, A, 2, 3, com as manilhas acima de todas, por naipe (paus > copas > espadas > ouros).
+- Cartas: abrindo a rodada, a mais forte (a mais fraca, se o time já ganhou uma rodada da mão); com o parceiro ganhando a rodada, descarta a mais fraca; senão, a menor carta que vence a mesa; sem carta que vença, descarta a mais fraca. Descarte da segunda rodada em diante vai coberto.
+- Nota da mão: zap 5, outra manilha 4, 3 vale 3, 2 vale 2, ás vale 1; mais a carta do time que está ganhando a rodada em andamento; mais 3 por rodada ganha e menos 3 por rodada perdida. Se o bot é o último a jogar a rodada que decide a mão, ele já sabe o resultado e a nota vai ao máximo (ou a zero).
+- Truco: pede com nota 6 ou mais (8 ou mais para pedir seis, nove ou doze); blefa com 8% de chance, só na primeira carta da mão. Desafiado, aumenta com 8 ou mais, aceita com 3 ou mais e corre abaixo disso.
+- Mão de onze: joga com nota 5 ou mais. No 2x2, a nota usa as três melhores cartas das duas mãos, porque o time com 11 vê as cartas do parceiro.
+- O sorteio (blefe e atrasos) usa a semente `BOTS_SEMENTE`, se definida no `.env`: o mesmo bot repete as mesmas escolhas nas mesmas situações.
+
+**Limitações.**
+
+- Um processo só, por causa do nome fixo do consumidor, como no Lobby e no Ranking.
+- Partida abandonada: se a pessoa não volta, o bot fica conectado esperando, como a partida (P20). Depois de 7 dias parada o Game a apaga, e o bot desiste dela com o 4404 na próxima vez que conectar.
+- Pedidos de antes do serviço existir também são atendidos (o grupo é criado a partir do início do stream): numa partida da fase 3 que ainda espera alguém, os bots entram e esperam junto; numa que já terminou, entram e saem.
+
+**Testes** (`docker compose run --rm bots pytest`, com o sistema no ar):
+
+- `tests/estrategia`: a estratégia, sem rede. Jogada válida em situações sorteadas, manilhas, carta coberta, truco e blefe, respostas, mão de onze e a regra do parceiro.
+- `tests/servico/test_partidas.py`: uma partida 1x1 de uma pessoa contra um bot e uma 2x2 de uma pessoa com três bots, criadas pelo Lobby e jogadas até o fim pelo container `bots` que está no ar. Conferem também que o bot confirma o pedido no fim e que o Ranking registra a partida da pessoa, sem o bot.
+- `tests/servico/test_retomada.py`: o serviço caindo no meio de uma partida, com o bot voltando a jogar quando ele sobe de novo, e o mesmo pedido chegando várias vezes sem criar outro bot. Aqui o serviço roda dentro do teste, num banco lógico próprio do broker (o 4), com partidas criadas direto no Game.

@@ -6,7 +6,7 @@ do evento, e cada mensagem com um campo só, "dados", com o evento em JSON.
 O Lobby PUBLICA bot.solicitado, um para cada assento de bot, quando a partida começa:
     {"partida_id", "assento", "nome", "nivel"}
     O "nome" ("Bot 1") vai junto porque o serviço de Bots precisa dele no token do bot (guia da
-    mesa, 10.5). Ninguém consome este evento até a fase 4.
+    mesa, 10.5). Quem consome este evento é o serviço de Bots (services/bots), com o grupo "bots".
 
 O Lobby LÊ partida.finalizada, com o grupo "lobby": a sala da partida passa a "encerrada" e sai
 da lista. O evento pode chegar mais de uma vez; o efeito é o mesmo (banco.encerrar_sala_da_partida).
