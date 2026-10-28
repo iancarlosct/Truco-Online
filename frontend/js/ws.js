@@ -15,7 +15,7 @@ import { WebSocketSimulado } from "./mock/servidor-game.js";
 // Com false, a mesma conexão vai para o Game real, pelo gateway, no mesmo endereço da página,
 // sem nenhuma outra mudança no código.
 // =====================================================================================
-const USAR_MOCK_GAME = true;
+const USAR_MOCK_GAME = false;
 
 // Espera antes de cada nova tentativa depois de uma queda: 1 s, 2 s, 4 s, 8 s e, daí em
 // diante, 10 s.

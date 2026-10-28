@@ -11,7 +11,7 @@ Este guia é para quem vai implementar o serviço Game em Python com FastAPI. El
 
 Quando os dois não batem, ou quando o código depende de algo que não está escrito em lugar nenhum, o texto traz um código como **P3**. Ele aponta para o item correspondente da seção 9, Pontos em aberto.
 
-**Importante:** o Game já existe e está no Docker Compose, mas a tela continua conversando com o servidor simulado, que roda dentro do navegador (`frontend/js/mock/servidor-game.js`): no topo de `frontend/js/ws.js`, a constante `USAR_MOCK_GAME` está em `true`. O motivo é o Lobby, ainda simulado: as partidas que ele "inicia" só existem no navegador, e o Game as recusaria com 4404. Com `false`, a mesma conexão vai para o Game de verdade, em `/ws/partidas/...` no mesmo endereço da página, sem nenhuma outra mudança no código. Para testar assim antes do Lobby, crie a partida com o script `services/game/scripts/partida_de_teste.py` ([README](../README.md), "Testar a mesa com o Game de verdade"). A chave vai para `false` de vez na fase 3, junto com o Lobby. O servidor simulado não é o motor de regras: ele existe só para testar a tela.
+**Importante:** a tela fala com o Game de verdade. No topo de `frontend/js/ws.js`, a constante `USAR_MOCK_GAME` está em `false` desde a fase 3, junto com o Lobby de verdade, que é quem cria as partidas no Game: a conexão vai para `/ws/partidas/...` no mesmo endereço da página. Com `true`, a mesa volta a conversar com o servidor simulado, que roda dentro do navegador (`frontend/js/mock/servidor-game.js`) e continua no repositório até o fechamento do projeto. O servidor simulado não é o motor de regras: ele existe só para testar a tela. O script `services/game/scripts/partida_de_teste.py` ainda cria uma partida sem passar pelo Lobby, para testes do Game ([README](../README.md)).
 
 ## 1. Como a tela funciona
 
@@ -833,7 +833,7 @@ from fastapi.staticfiles import StaticFiles
 app.mount("/", StaticFiles(directory="caminho/para/o/repositorio/frontend", html=True), name="tela")
 ```
 
-2. Em `frontend/js/ws.js`, troque `USAR_MOCK_GAME` para `false`. Não faça commit dessa troca antes de o Lobby de verdade estar no ar (fase 3): até lá, as partidas que o lobby "inicia" não existem no Game.
+2. Em `frontend/js/ws.js`, confira que `USAR_MOCK_GAME` está em `false` (o padrão desde a fase 3).
 3. Suba o servidor (`uvicorn main:app --reload --port 8001`), abra `http://localhost:8001/index.html` e entre. O login pode continuar no mock: os exemplos da seção 7 não conferem o token.
 4. Abra `http://localhost:8001/mesa.html?partida=p1`. A mesa desenha o `estado` do servidor, e os cliques saem pela conexão. Com o exemplo 7.2, o chat vai e volta; as outras mensagens só aparecem no terminal do servidor. O assento, nesse exemplo, vem de `?assento=` na URL do WebSocket, que a tela não manda: pela tela você é sempre o assento 0.
 5. Para ver a reconexão, pare o servidor e suba de novo: a mesa mostra "Conexão perdida. Reconectando…" e volta sozinha. Com `?partida=` de uma partida que não existe, o exemplo 7.2 fecha com 4404, e a tela mostra "Esta partida não existe." e volta para o lobby.

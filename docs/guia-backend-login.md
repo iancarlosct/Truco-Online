@@ -11,7 +11,7 @@ Este guia é para quem vai implementar o serviço Auth em Python com FastAPI e P
 
 Quando essas fontes não batem, ou quando o código depende de algo que não está escrito em lugar nenhum, o texto traz um código como **P3**. Ele aponta para o item correspondente da seção 10, Pontos em aberto.
 
-**Importante:** a tela já fala com o serviço. No topo de `frontend/js/api.js`, a constante `USAR_MOCK` está em `false`: o cadastro e o login vão ao Auth, pelo gateway. Com `true`, as mesmas funções voltam a ser simuladas dentro do navegador, sem nenhuma outra mudança no código da tela. O código do mock continua no arquivo, desligado (P1). O Lobby e o Ranking têm chaves próprias, `USAR_MOCK_LOBBY` e `USAR_MOCK_RANKING`, logo abaixo, que continuam em `true`: trocar o `USAR_MOCK` não mexe nelas ([guia do lobby](guia-backend-lobby.md)). Ao trocar o mock pelo serviço, limpe o `localStorage` do navegador (seção 9.3, passo 4).
+**Importante:** a tela já fala com o serviço. No topo de `frontend/js/api.js`, a constante `USAR_MOCK` está em `false`: o cadastro e o login vão ao Auth, pelo gateway. Com `true`, as mesmas funções voltam a ser simuladas dentro do navegador, sem nenhuma outra mudança no código da tela. O código do mock continua no arquivo, desligado (P1). O Lobby e o Ranking têm chaves próprias, `USAR_MOCK_LOBBY` e `USAR_MOCK_RANKING`, logo abaixo, também em `false` desde a fase 3: trocar o `USAR_MOCK` não mexe nelas ([guia do lobby](guia-backend-lobby.md)). Ao trocar o mock pelo serviço, limpe o `localStorage` do navegador (seção 9.3, passo 4).
 
 **O que o serviço real faz diferente** do texto e dos exemplos deste guia:
 
@@ -869,7 +869,7 @@ A tela e a API precisam estar no mesmo endereço, porque a tela chama `/api/auth
 
 Para testar o exemplo da seção 8 sem o Docker, o próprio serviço de teste pode entregar os arquivos da tela:
 
-1. Em `frontend/js/api.js`, confira que a linha 13 está como `const USAR_MOCK = false;`. É a única chave que importa aqui: as do Lobby e do Ranking, nas linhas 21 e 22, continuam em `true`.
+1. Em `frontend/js/api.js`, confira que a linha 13 está como `const USAR_MOCK = false;`. É a única chave que importa aqui; as do Lobby e do Ranking, nas linhas 21 e 22, estão em `false` desde a fase 3.
 2. Acrescente este trecho no **fim** do `main.py` de teste, depois de `app.include_router(rotas)`, trocando o caminho pelo da pasta `frontend` do repositório:
 
 ```python
@@ -909,7 +909,7 @@ Abrir a tela por `python -m http.server`, como no desenvolvimento do frontend, n
 
 ### Diferenças entre a tela e o documento de contratos
 
-- **P1. A tela ainda usa o mock. Em parte resolvido.** `USAR_MOCK` está em `false` em `frontend/js/api.js`, e o cadastro e o login vão ao Auth pelo gateway. Falta apagar o código do mock do Auth do arquivo, o que fica para o fechamento do projeto. O Lobby e o Ranking têm chaves e mocks próprios, que saem quando esses serviços estiverem no ar.
+- **P1. A tela ainda usa o mock. Em parte resolvido.** `USAR_MOCK` está em `false` em `frontend/js/api.js`, e o cadastro e o login vão ao Auth pelo gateway. Falta apagar o código do mock do Auth do arquivo, o que fica para o fechamento do projeto. O Lobby e o Ranking têm chaves e mocks próprios: as chaves estão em `false` desde a fase 3, e o código dos mocks sai junto com o do Auth.
 - **P2. `GET /api/auth/me` não é usado.** A rota está no contrato, mas nenhuma tela a chama. Decidir se o frontend passa a usá-la, por exemplo para conferir o token ao abrir o lobby, ou se ela fica só para testes.
 - **P3. Logout sem rota.** O requisito RF02 pede login e logout, mas o contrato não tem rota de logout. Hoje sair é apagar o token do navegador, e o token continua valendo até vencer. Decidir se isso basta.
 - **P4. Resposta do cadastro.** O contrato pede `id` e `nome`, mas não diz o status. A tela não lê o corpo e aceita qualquer status de sucesso. Este guia usa 201. **Resolvido:** o serviço responde 201.

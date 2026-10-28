@@ -19,31 +19,41 @@
 #   rede-auth-db     auth + auth-db, e mais ninguém. Marcada como "internal": não tem saída para
 #                    fora do Docker. O gateway nem consegue achar o nome "auth-db".
 #   rede-game-redis  game + game-redis, e mais ninguém (internal), no mesmo padrão.
-#   rede-eventos     game + eventos (internal). Nas próximas fases, lobby, ranking e bots também
-#                    entram nela. O gateway e o auth não entram.
+#   rede-lobby-db    lobby + lobby-db (internal), no mesmo padrão.
+#   rede-ranking-db  ranking + ranking-db (internal), no mesmo padrão.
+#   rede-eventos     game, lobby, ranking + eventos (internal). Na fase 4, os bots também entram.
+#                    O gateway e o auth não entram.
 #
 #        navegador
 #            |  porta ${GATEWAY_PORTA} (padrão 80)
-#        [gateway] ----- rede-servicos ----- [auth] ----- rede-auth-db ----- [auth-db]
+#        [gateway] ----- rede-servicos ----- [auth] ------ rede-auth-db ------ [auth-db]
 #                              |
-#                              +------------ [game] ----- rede-game-redis -- [game-redis]
+#                              +------------ [lobby] ----- rede-lobby-db ----- [lobby-db]
+#                              |                |
+#                              +------------ [ranking] --- rede-ranking-db --- [ranking-db]
+#                              |                |
+#                              +------------ [game] ------ rede-game-redis --- [game-redis]
 #                                               |
-#                                               +-------- rede-eventos ----- [eventos]
+#                     lobby, ranking e game --- rede-eventos ----------------- [eventos]
+#
+# O lobby chama o game pela rede-servicos (POST /interno/partidas, fora do gateway). O ranking
+# não é chamado por ninguém além do gateway: só lê o evento partida.finalizada do broker.
 #
 # game-redis e eventos: dois Redis com papéis diferentes
 # - game-redis é o BANCO do Game, como o auth-db é o do Auth: guarda o estado das partidas (e a
 #   fila de eventos ainda não entregues). É dado do Game, e nenhum outro serviço o acessa.
 # - eventos é o BROKER, o meio de comunicação entre os serviços: o Game publica nele os eventos
 #   partida.criada e partida.finalizada (Redis Streams, um stream por evento), e os outros
-#   serviços vão lê-los. Não guarda dado de ninguém: só as mensagens em trânsito.
+#   serviços os leem (lobby e ranking; o lobby também publica bot.solicitado). Não guarda dado
+#   de ninguém: só as mensagens em trânsito.
 #   Separados, um serviço que lê eventos nunca enxerga as partidas, e o Game continua jogando
 #   mesmo com o broker fora do ar (os eventos esperam na fila do game-redis).
 #
-# Nas próximas fases, repita o padrão para cada serviço novo:
+# Para cada serviço novo (o bots, na fase 4), repita o padrão:
 # - o serviço entra na rede-servicos (para receber as requisições do gateway);
 # - se ele tiver banco, crie um container <servico>-db, uma rede rede-<servico>-db (internal)
-#   só com os dois, um volume <servico>-db-dados e variáveis <SERVICO>_DB_* no .env.
-#   Exemplos: lobby + lobby-db em rede-lobby-db; ranking + ranking-db em rede-ranking-db;
+#   só com os dois, um volume <servico>-db-dados e variáveis <SERVICO>_DB_* no .env, como o
+#   lobby + lobby-db e o ranking + ranking-db abaixo;
 # - se ele publica ou lê eventos, entra também na rede-eventos e recebe EVENTOS_* como o game.
 # ---------------------------------------------------------------------------------------------
 
@@ -67,6 +77,10 @@ services:
       - rede-servicos
     depends_on:
       auth:
+        condition: service_healthy
+      lobby:
+        condition: service_healthy
+      ranking:
         condition: service_healthy
       game:
         condition: service_healthy
@@ -113,6 +127,117 @@ services:
       - rede-auth-db
     # Pronto quando aceita conexões pela rede (-h 127.0.0.1). Sem o -h, o teste usaria o socket
     # local e daria "pronto" ainda durante a inicialização do banco, antes de ele ouvir a rede.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+      start_interval: 2s
+
+  # Serviço Lobby: salas, assentos, bots, presença e início da partida (docs/guia-backend-lobby.md).
+  # Recebe do gateway o /api/lobby/, chama o Game (POST /interno/partidas) pela rede-servicos, lê
+  # partida.finalizada e publica bot.solicitado no broker (rede-eventos).
+  lobby:
+    build: ./services/lobby
+    restart: unless-stopped
+    environment:
+      JWT_SEGREDO: ${JWT_SEGREDO:?defina JWT_SEGREDO no .env (copie o .env.example)}
+      # Como no Auth, dentro do container o serviço lê sempre BANCO_*.
+      BANCO_HOST: lobby-db
+      BANCO_PORTA: "5432"
+      BANCO_NOME: ${LOBBY_DB_NOME:?defina LOBBY_DB_NOME no .env (copie o .env.example)}
+      BANCO_USUARIO: ${LOBBY_DB_USUARIO:?defina LOBBY_DB_USUARIO no .env (copie o .env.example)}
+      BANCO_SENHA: ${LOBBY_DB_SENHA:?defina LOBBY_DB_SENHA no .env (copie o .env.example)}
+      # Endereço interno do Game. Não é segredo, por isso fica aqui e não no .env.
+      GAME_URL: http://game:8000
+      EVENTOS_HOST: eventos
+      EVENTOS_PORTA: "6379"
+      EVENTOS_SENHA: ${EVENTOS_SENHA:?defina EVENTOS_SENHA no .env (copie o .env.example)}
+    networks:
+      - rede-servicos
+      - rede-lobby-db
+      - rede-eventos
+    # O Game não está aqui: sem ele o Lobby sobe e funciona, e só o "iniciar" responde 503.
+    depends_on:
+      lobby-db:
+        condition: service_healthy
+      eventos:
+        condition: service_healthy
+    # GET /saude responde 200 quando o serviço está no ar e alcança o banco.
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/saude', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+      start_interval: 2s
+
+  # Banco do Lobby. Só o serviço lobby chega até ele (rede-lobby-db).
+  lobby-db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${LOBBY_DB_NOME:?defina LOBBY_DB_NOME no .env (copie o .env.example)}
+      POSTGRES_USER: ${LOBBY_DB_USUARIO:?defina LOBBY_DB_USUARIO no .env (copie o .env.example)}
+      POSTGRES_PASSWORD: ${LOBBY_DB_SENHA:?defina LOBBY_DB_SENHA no .env (copie o .env.example)}
+    volumes:
+      - lobby-db-dados:/var/lib/postgresql/data
+    networks:
+      - rede-lobby-db
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+      start_interval: 2s
+
+  # Serviço Ranking: vitórias e partidas de cada jogador, a partir do evento partida.finalizada
+  # (docs/guia-backend-lobby.md). Recebe do gateway o /api/ranking; ninguém mais o chama.
+  ranking:
+    build: ./services/ranking
+    restart: unless-stopped
+    environment:
+      JWT_SEGREDO: ${JWT_SEGREDO:?defina JWT_SEGREDO no .env (copie o .env.example)}
+      BANCO_HOST: ranking-db
+      BANCO_PORTA: "5432"
+      BANCO_NOME: ${RANKING_DB_NOME:?defina RANKING_DB_NOME no .env (copie o .env.example)}
+      BANCO_USUARIO: ${RANKING_DB_USUARIO:?defina RANKING_DB_USUARIO no .env (copie o .env.example)}
+      BANCO_SENHA: ${RANKING_DB_SENHA:?defina RANKING_DB_SENHA no .env (copie o .env.example)}
+      EVENTOS_HOST: eventos
+      EVENTOS_PORTA: "6379"
+      EVENTOS_SENHA: ${EVENTOS_SENHA:?defina EVENTOS_SENHA no .env (copie o .env.example)}
+    networks:
+      - rede-servicos
+      - rede-ranking-db
+      - rede-eventos
+    depends_on:
+      ranking-db:
+        condition: service_healthy
+      eventos:
+        condition: service_healthy
+    # GET /saude responde 200 quando o serviço está no ar e alcança o banco.
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/saude', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+      start_interval: 2s
+
+  # Banco do Ranking. Só o serviço ranking chega até ele (rede-ranking-db).
+  ranking-db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${RANKING_DB_NOME:?defina RANKING_DB_NOME no .env (copie o .env.example)}
+      POSTGRES_USER: ${RANKING_DB_USUARIO:?defina RANKING_DB_USUARIO no .env (copie o .env.example)}
+      POSTGRES_PASSWORD: ${RANKING_DB_SENHA:?defina RANKING_DB_SENHA no .env (copie o .env.example)}
+    volumes:
+      - ranking-db-dados:/var/lib/postgresql/data
+    networks:
+      - rede-ranking-db
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
       interval: 30s
@@ -178,7 +303,8 @@ services:
       start_interval: 2s
 
   # Broker de eventos: Redis dedicado à comunicação entre os serviços, com Redis Streams.
-  # Nesta fase só o game publica; lobby, ranking e bots vão se conectar pela rede-eventos.
+  # O game publica partida.criada e partida.finalizada; o lobby lê partida.finalizada e publica
+  # bot.solicitado; o ranking lê partida.finalizada. Os bots entram na fase 4.
   # Também grava em disco: um evento publicado espera no stream até o consumidor ler.
   eventos:
     image: redis:8.2-alpine
@@ -202,6 +328,10 @@ networks:
   rede-servicos: {}
   rede-auth-db:
     internal: true
+  rede-lobby-db:
+    internal: true
+  rede-ranking-db:
+    internal: true
   rede-game-redis:
     internal: true
   rede-eventos:
@@ -210,5 +340,7 @@ networks:
 volumes:
   # Dados de cada banco. Sobrevivem a "docker compose down"; só "down -v" apaga.
   auth-db-dados:
+  lobby-db-dados:
+  ranking-db-dados:
   game-redis-dados:
   eventos-dados:

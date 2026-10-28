@@ -11,7 +11,7 @@ Este guia é para quem vai implementar os serviços Lobby e Ranking em Python co
 
 Quando essas fontes não definem algo, ou quando o guia propõe uma forma de fazer, o texto traz um código como **P3**. Ele aponta para o item correspondente da seção 10, Pontos em aberto.
 
-**Importante:** hoje a tela não chama nenhum dos dois serviços. No topo de `frontend/js/api.js`, as constantes `USAR_MOCK_LOBBY` e `USAR_MOCK_RANKING` (linhas 21 e 22) estão em `true`: com elas, as salas e o ranking são simulados dentro do navegador. Com `false`, as mesmas funções passam a chamar os serviços, sem nenhuma outra mudança no código da tela (seção 9.4). Cada serviço tem a sua chave, então dá para ligar um de cada vez. O login tem a dele, `USAR_MOCK`, na linha 13 ([guia do login](guia-backend-login.md)).
+**Importante:** os dois serviços existem (`services/lobby/` e `services/ranking/`, no Docker Compose desde a fase 3), e a tela fala com eles. No topo de `frontend/js/api.js`, as constantes `USAR_MOCK_LOBBY` e `USAR_MOCK_RANKING` (linhas 21 e 22) estão em `false`, e a `USAR_MOCK_GAME`, em `frontend/js/ws.js`, também: as salas, o ranking e a mesa são os de verdade. O código dos mocks continua nos arquivos, desligado, até o fechamento do projeto (fase 6). Com `true`, as mesmas funções voltam a ser simuladas no navegador, sem nenhuma outra mudança no código da tela. A seção 11 registra o que a implementação decidiu além das seções anteriores; os exemplos da seção 8 continuam como material de estudo.
 
 ## 1. Como a tela funciona
 
@@ -93,11 +93,11 @@ Toda chamada passa pela função `requisitar`, de `api.js`, que manda o cabeçal
 
 O botão Sair do lobby chama `POST .../sair` antes do logout quando a sala de espera está aberta e o jogador está sentado nela.
 
-### 1.6 O mock de hoje
+### 1.6 O mock (desligado desde a fase 3)
 
 Com `USAR_MOCK_LOBBY = true`, o mock de `api.js` faz o papel do servidor. Ele guarda as salas no `localStorage` do navegador, começa com cinco salas de jogadores fictícios e, alguns segundos depois de você criar uma sala, senta um jogador fictício numa vaga. No console do navegador, `mockLobby.ajuda()` lista comandos para simular os outros jogadores.
 
-O mock segue as rotas e os códigos de erro deste guia. Em quatro pontos ele ainda difere das regras do grupo, e a tela funciona com as duas formas:
+O mock segue as rotas e os códigos de erro deste guia. Em quatro pontos ele difere das regras do grupo, que o serviço de verdade segue, e a tela funciona com as duas formas:
 
 | Ponto | Mock | Regra (este guia) |
 |---|---|---|
@@ -108,45 +108,46 @@ O mock segue as rotas e os códigos de erro deste guia. Em quatro pontos ele ain
 
 ## 2. Checklist do que os serviços precisam entregar
 
-Na ordem recomendada. Cada etapa termina em algo que dá para ver funcionando.
+Na ordem recomendada. Cada etapa termina em algo que dá para ver funcionando. Feito na fase 3, menos o último item.
 
 **Etapa 1: o Lobby respondendo no formato certo**
 
-- [ ] Projeto FastAPI rodando com o Uvicorn (seção 8).
-- [ ] Token conferido em todas as rotas, com o mesmo segredo do Auth (seção 6.1).
-- [ ] `GET` e `POST /api/lobby/salas` e `GET /api/lobby/salas/{id}`, com a sala no formato da seção 4.
-- [ ] `entrar` e `sair`, inclusive a troca de assento.
-- [ ] Erros no formato `{"erro": "...", "mensagem": "..."}`, inclusive os que o FastAPI gera sozinho (seção 5).
+- [x] Projeto FastAPI rodando com o Uvicorn (seção 8).
+- [x] Token conferido em todas as rotas, com o mesmo segredo do Auth (seção 6.1).
+- [x] `GET` e `POST /api/lobby/salas` e `GET /api/lobby/salas/{id}`, com a sala no formato da seção 4.
+- [x] `entrar` e `sair`, inclusive a troca de assento.
+- [x] Erros no formato `{"erro": "...", "mensagem": "..."}`, inclusive os que o FastAPI gera sozinho (seção 5).
 
 Com isso a lista, a criação e a sala de espera já funcionam com a tela (seção 9.4), com o ranking ainda no mock.
 
 **Etapa 2: regras do dono e das salas**
 
-- [ ] `bot` e `DELETE .../assentos/{assento}`, só para o dono (seção 6.2).
-- [ ] Uma sala aberta por usuário (seção 6.3).
-- [ ] Dono que sai encerra a sala (seção 6.4).
-- [ ] Um pedido de cada vez por sala, para dois jogadores não sentarem no mesmo assento (seção 6.8).
+- [x] `bot` e `DELETE .../assentos/{assento}`, só para o dono (seção 6.2).
+- [x] Uma sala aberta por usuário (seção 6.3).
+- [x] Dono que sai encerra a sala (seção 6.4).
+- [x] Um pedido de cada vez por sala, para dois jogadores não sentarem no mesmo assento (seção 6.8).
 
 **Etapa 3: presença**
 
-- [ ] Hora do último `GET` de cada jogador sentado. Depois de 60 segundos sem ele, o jogador sai da sala, e o dono ausente encerra a sala (seção 6.5).
+- [x] Hora do último `GET` de cada jogador sentado. Depois de 60 segundos sem ele, o jogador sai da sala, e o dono ausente encerra a sala (seção 6.5).
 
 **Etapa 4: início da partida**
 
-- [ ] `POST .../iniciar` pedindo a partida ao Game em `POST /interno/partidas` (seção 6.6).
-- [ ] Um evento `bot.solicitado` no Redis Streams para cada bot da sala (seções 6.6 e 7.4).
+- [x] `POST .../iniciar` pedindo a partida ao Game em `POST /interno/partidas` (seção 6.6).
+- [x] Um evento `bot.solicitado` no Redis Streams para cada bot da sala (seções 6.6 e 7.4).
 
 **Etapa 5: Ranking**
 
-- [ ] Leitura do evento `partida.finalizada`, sem contar a mesma partida duas vezes (seções 6.7 e 7.4).
-- [ ] `GET /api/ranking` com os 10 primeiros, a linha do usuário logado quando ele está abaixo deles e empates dividindo a posição (seção 3.10).
+- [x] Leitura do evento `partida.finalizada`, sem contar a mesma partida duas vezes (seções 6.7 e 7.4).
+- [x] `GET /api/ranking` com os 10 primeiros, a linha do usuário logado quando ele está abaixo deles e empates dividindo a posição (seção 3.10).
 
 **Etapa 6: Postgres, Docker e gateway**
 
-- [ ] Tabelas do Lobby e do Ranking no Postgres (seção 7).
-- [ ] Serviços no Docker Compose, com o Uvicorn em `--host 0.0.0.0` e um processo só (seção 6.8).
-- [ ] Rotas `/api/lobby/` e `/api/ranking` no Nginx, e `/interno` fora dele (seção 3.1).
-- [ ] `USAR_MOCK_LOBBY` e `USAR_MOCK_RANKING` em `false` na tela, e o mock apagado de `api.js` quando os dois serviços estiverem no ar.
+- [x] Tabelas do Lobby e do Ranking no Postgres (seção 7).
+- [x] Serviços no Docker Compose, com o Uvicorn em `--host 0.0.0.0` e um processo só (seção 6.8).
+- [x] Rotas `/api/lobby/` e `/api/ranking` no Nginx, e `/interno` fora dele (seção 3.1).
+- [x] `USAR_MOCK_LOBBY` e `USAR_MOCK_RANKING` em `false` na tela (e `USAR_MOCK_GAME`, em `ws.js`).
+- [ ] O mock apagado de `api.js`: fica para o fechamento do projeto (fase 6).
 
 ## 3. Rotas
 
@@ -164,9 +165,9 @@ Com isso a lista, a criação e a sala de espera já funcionam com a tela (seç�
 | POST | `/api/lobby/salas/{id}/iniciar` | nenhum | 200, `{"partida_id"}` | O dono |
 | GET | `/api/ranking` | nenhum | 200, lista de linhas | Qualquer usuário logado |
 
-O documento de contratos tem também `GET /api/ranking/jogadores/{id}`, que a tela ainda não usa (P15).
+O documento de contratos tem também `GET /api/ranking/jogadores/{id}`, que a tela ainda não usa. O serviço já a atende, no formato da seção 11.5 (P15).
 
-O caminho chega inteiro ao serviço, como no guia do login (seção 3.1 de lá): as rotas são declaradas com o prefixo completo (`APIRouter(prefix="/api/lobby")`). Assim a mesma URL funciona direto no serviço e pelo gateway (P17). O trecho abaixo segue a documentação do Nginx e não foi testado aqui, porque o gateway ainda não existe no repositório:
+O caminho chega inteiro ao serviço, como no guia do login (seção 3.1 de lá): as rotas são declaradas com o prefixo completo (`APIRouter(prefix="/api/lobby")`). Assim a mesma URL funciona direto no serviço e pelo gateway (P17). O trecho abaixo é o esboço original; a configuração em uso está em `gateway/nginx.conf`, com um `upstream` por serviço e o `resolve` (o gateway acompanha um container recriado sem reiniciar):
 
 ```nginx
 location /api/lobby/ {
@@ -1610,7 +1611,7 @@ curl -s http://localhost:8004/api/ranking -H "Authorization: Bearer $(token u-ca
 
 ### 9.4 Com a tela de verdade
 
-A tela e as APIs precisam estar no mesmo endereço, porque a tela chama `/api/...` no endereço de onde ela mesma foi carregada. Com o gateway no ar, basta subir tudo com o Docker Compose e abrir `http://localhost`. Enquanto ele não existe, um arquivo de teste junta os três exemplos num processo só e ainda entrega os arquivos da tela:
+A tela e as APIs precisam estar no mesmo endereço, porque a tela chama `/api/...` no endereço de onde ela mesma foi carregada. Com o gateway no ar, basta subir tudo com o Docker Compose e abrir `http://localhost`: desde a fase 3, as chaves dos mocks já estão em `false`, e o roteiro do teste com dois navegadores está no [README](../README.md) ("Testar o fluxo completo"). O roteiro abaixo é o da época dos exemplos, sem o gateway: um arquivo de teste junta os três exemplos num processo só e ainda entrega os arquivos da tela:
 
 1. Na pasta dos exemplos, salve o `main.py` do guia do login (seções 8.1 e 8.2 de lá) como `auth.py`, e crie o `juntos.py`, trocando o caminho pelo da pasta `frontend` do repositório:
 
@@ -1669,30 +1670,171 @@ Abrir a tela por `python -m http.server`, como no desenvolvimento do frontend, n
 
 ## 10. Pontos em aberto
 
+Na fase 3, com os serviços de verdade, quase todos foram fechados; cada item diz como.
+
 ### Propostas deste guia (nem a tela nem o documento de contratos definem)
 
-- **P1. Falha do Game ao iniciar.** O documento não diz o que o Lobby responde quando o Game não atende o `POST /interno/partidas`, e o mock não tem esse caso. Este guia propõe 503 `game_indisponivel`, com a sala continuando `"aguardando"`. A tela mostra a `mensagem` que vier, então qualquer código funciona; falta fechar.
+- **P1. Falha do Game ao iniciar.** O documento não diz o que o Lobby responde quando o Game não atende o `POST /interno/partidas`, e o mock não tem esse caso. Este guia propõe 503 `game_indisponivel`, com a sala continuando `"aguardando"`. A tela mostra a `mensagem` que vier, então qualquer código funciona; falta fechar. **Resolvido:** o Lobby adotou o 503 `game_indisponivel` para qualquer falha do Game (fora do ar, mais de 5 segundos sem resposta, resposta de erro ou sem `partida_id`). A sala continua `"aguardando"` e nenhum `bot.solicitado` sai; o motivo fica no log do Lobby (seção 11.2).
 - **P2. Corpo do `POST /interno/partidas`.** O documento diz "`sala_id` e a lista de assentos (`usuario_id`, `nome`, `bot`)", sem os nomes dos campos. Este guia propõe `{"sala_id", "assentos": [{"assento", "usuario_id", "nome", "bot"}]}`, com o número do assento, e a resposta `{"partida_id"}`. Combinar com quem faz a camada de serviço do Game. **Resolvido:** o Game adotou o corpo proposto, responde 201 com `{"partida_id"}` e 422 `dados_invalidos` para assentos que não formam uma mesa ([guia da mesa](guia-backend-mesa.md), seção 10.3).
 - **P3. Formato dos eventos no Redis Streams.** O documento diz só que os eventos vão para o Redis Streams. Este guia propõe um stream por evento, com o nome do evento, os dados em JSON no campo `dados` e um grupo por serviço consumidor (seção 7.4). Combinar com quem faz o Game e o Bots. **Resolvido:** o Game publica `partida.criada` e `partida.finalizada` assim, num Redis dedicado aos eventos, o container `eventos` (`rede-eventos`, senha `EVENTOS_SENHA`), separado do banco do Game ([guia da mesa](guia-backend-mesa.md), seção 10.4).
 - **P4. Formato de `times` no `partida.finalizada`.** O documento diz "jogadores de cada time". Os exemplos usam `{"A": [{"usuario_id", "nome"}], "B": [...]}`, com bots de `usuario_id` nulo. Combinar com quem faz o Game. **Resolvido:** o Game usa esse formato, com `assento` e `bot` a mais em cada jogador; o exemplo de `registrar_partida` da seção 8.2 funciona sem mudança ([guia da mesa](guia-backend-mesa.md), seção 10.4).
-- **P5. Empates no ranking.** O grupo decidiu que empate em vitórias divide a posição. Este guia propõe que a posição seguinte pule as divididas (1, 2, 2, 4, como o `RANK()`) e que, dentro do empate, a ordem seja alfabética pelo nome. Outra opção seria não pular (1, 2, 2, 3) e desempatar a ordem por menos partidas.
-- **P6. Status de sucesso.** Este guia usa 201 no `POST /api/lobby/salas` e 200 nas demais rotas. A tela aceita qualquer status de 200 a 299.
-- **P7. Nível do bot.** O exemplo só aceita `"padrao"` e responde 422 para outro valor. O mock aceita qualquer valor. Decidir se haverá outros níveis.
-- **P8. Ações em sala encerrada.** Pela decisão do grupo, a sala encerrada continua existindo, com `"status": "encerrada"`. Este guia faz o `GET` dela responder 200 e as ações responderem 404 `sala_nao_encontrada`, que é o que o mock responde hoje para uma sala que deixou de existir. Confirmar; a alternativa seria 409 com outro código.
-- **P9. Começo do prazo de presença.** A regra fala em 60 segundos sem `GET`. Este guia conta o prazo a partir do momento em que o jogador senta (criar, entrar, trocar de assento). Confirmar.
+- **P5. Empates no ranking.** O grupo decidiu que empate em vitórias divide a posição. Este guia propõe que a posição seguinte pule as divididas (1, 2, 2, 4, como o `RANK()`) e que, dentro do empate, a ordem seja alfabética pelo nome. Outra opção seria não pular (1, 2, 2, 3) e desempatar a ordem por menos partidas. **Resolvido:** adotada a proposta, `RANK()` (1, 2, 2, 4) e ordem alfabética dentro do empate, sem diferenciar maiúsculas; nomes iguais desempatam pelo id, para a ordem não mudar entre um pedido e outro.
+- **P6. Status de sucesso.** Este guia usa 201 no `POST /api/lobby/salas` e 200 nas demais rotas. A tela aceita qualquer status de 200 a 299. **Resolvido:** adotado assim.
+- **P7. Nível do bot.** O exemplo só aceita `"padrao"` e responde 422 para outro valor. O mock aceita qualquer valor. Decidir se haverá outros níveis. **Resolvido:** só `"padrao"` por enquanto; outro valor responde 422 "Nível de bot inválido.", e o corpo sem `nivel` vale `"padrao"`. Um nível novo, se a fase 4 quiser, entra em `NIVEIS_DE_BOT` (`services/lobby/app/config.py`).
+- **P8. Ações em sala encerrada.** Pela decisão do grupo, a sala encerrada continua existindo, com `"status": "encerrada"`. Este guia faz o `GET` dela responder 200 e as ações responderem 404 `sala_nao_encontrada`, que é o que o mock responde hoje para uma sala que deixou de existir. Confirmar; a alternativa seria 409 com outro código. **Resolvido:** adotado o 404 `sala_nao_encontrada`.
+- **P9. Começo do prazo de presença.** A regra fala em 60 segundos sem `GET`. Este guia conta o prazo a partir do momento em que o jogador senta (criar, entrar, trocar de assento). Confirmar. **Resolvido:** adotado assim. Pedir o próprio assento ("entrar" no assento em que já está) não muda nada, nem o prazo.
 
 ### Consequências das regras para a tela
 
 - **P10. Aba oculta tira o jogador da sala. Resolvido.** A sala de espera continua pedindo a sala com a aba oculta, e o prazo de presença passou de 15 para 60 segundos, para cobrir a redução dos timers em abas ocultas (seção 6.5). Só a lista para de atualizar com a aba oculta.
-- **P11. Empate na 10ª posição.** "Os 10 primeiros" são 10 linhas. Se a 10ª e a 11ª linhas empatam, a 11ª fica de fora, mesmo tendo a mesma posição da 10ª. Mandar mais de 10 linhas não adianta: a tela mostra só as 10 primeiras e, depois delas, só a do usuário logado. Decidir se isso basta.
-- **P12. A sala depois da partida.** O documento diz que o Lobby recebe `partida.criada` e `partida.finalizada`, mas não diz para quê. O `partida.criada` repete o que o Lobby já sabe pela resposta do `POST /interno/partidas`. Para o `partida.finalizada`, falta decidir se a sala muda de status (não há status para isso no contrato). Enquanto a sala tiver `partida_id`, quem estava nela e abrir o link volta para a mesa daquela partida.
+- **P11. Empate na 10ª posição.** "Os 10 primeiros" são 10 linhas. Se a 10ª e a 11ª linhas empatam, a 11ª fica de fora, mesmo tendo a mesma posição da 10ª. Mandar mais de 10 linhas não adianta: a tela mostra só as 10 primeiras e, depois delas, só a do usuário logado. Decidir se isso basta. **Adotado como proposto na fase 3:** 10 linhas, mais a do usuário logado quando ele está abaixo, mesmo que empatado com a 10ª (ela vem no fim com a mesma posição). Mudar a regra é mudar só a consulta (`services/ranking/app/banco.py`).
+- **P12. A sala depois da partida.** O documento diz que o Lobby recebe `partida.criada` e `partida.finalizada`, mas não diz para quê. O `partida.criada` repete o que o Lobby já sabe pela resposta do `POST /interno/partidas`. Para o `partida.finalizada`, falta decidir se a sala muda de status (não há status para isso no contrato). Enquanto a sala tiver `partida_id`, quem estava nela e abrir o link volta para a mesa daquela partida. **Resolvido:** o Lobby lê o `partida.finalizada` e passa a sala da partida para `"encerrada"`: ela sai da lista. O `partida_id` continua gravado nela; quem estava sentado e abre o link antigo vai para a mesa daquela partida, que mostra o placar final. O `partida.criada` não é lido pelo Lobby (seção 11.3).
 
 ### Decisões do backend
 
-- **P13. Falha ao publicar o `bot.solicitado`.** Se o Redis estiver fora do ar depois de o Game criar a partida, a sala já está `"em_partida"`, mas os bots não chegam à mesa. Decidir se o Lobby tenta de novo, desfaz a partida ou avisa o dono.
-- **P14. Partidas contra bots no ranking.** O exemplo conta a partida para os jogadores humanos mesmo quando os adversários são bots. Assim, dá para subir no ranking jogando só contra bots. Decidir se essas partidas contam.
-- **P15. Histórico do jogador (RF18).** O documento tem `GET /api/ranking/jogadores/{id}` ("estatísticas e últimas partidas"), mas a tela ainda não tem onde mostrar o histórico. Quando a tela existir, a rota e o formato precisam ser detalhados como os deste guia.
-- **P16. Nome do jogador.** O nome no assento vem do campo `nome` do token, que é proposta do guia do login (P12 de lá). Se o usuário puder mudar de nome, o token antigo continua com o nome velho até vencer. Nomes repetidos também se confundem na mesa ([guia da mesa](guia-backend-mesa.md), P14).
-- **P17. Prefixos no Nginx.** Decidir junto com o Auth se o gateway repassa o caminho inteiro, como este guia assume (guia do login, P15). `/api/ranking` precisa funcionar sem barra no fim, e `/interno` não pode ser exposto.
-- **P18. Um processo ou vários.** O exemplo trava tudo na memória e lê o Redis com um nome de consumidor fixo: os dois serviços precisam rodar com um processo só. Com o Postgres e as travas da seção 7.2, o Lobby pode ter mais processos; o consumidor do Ranking precisaria de um nome por processo.
-- **P19. Códigos de 401.** Os exemplos seguem o guia do login: `token_invalido` para token ausente ou inválido e `token_expirado` para token vencido. O mock responde `token_expirado` nos dois casos. A tela não lê o código, só o status, então a diferença só importa para quem lê os logs.
+- **P13. Falha ao publicar o `bot.solicitado`.** Se o Redis estiver fora do ar depois de o Game criar a partida, a sala já está `"em_partida"`, mas os bots não chegam à mesa. Decidir se o Lobby tenta de novo, desfaz a partida ou avisa o dono. **Resolvido:** como no Game, o evento entra numa fila no `lobby-db` (tabela `eventos_pendentes`), na mesma transação que inicia a partida, e uma linha de execução do Lobby o entrega ao broker. Com o broker fora do ar, a partida começa e o evento espera na fila (seção 11.3).
+- **P14. Partidas contra bots no ranking.** O exemplo conta a partida para os jogadores humanos mesmo quando os adversários são bots. Assim, dá para subir no ranking jogando só contra bots. Decidir se essas partidas contam. **Resolvido (decisão do grupo):** contam normalmente para os jogadores humanos. Os bots ficam no histórico da partida, mas não no ranking.
+- **P15. Histórico do jogador (RF18).** O documento tem `GET /api/ranking/jogadores/{id}` ("estatísticas e últimas partidas"), mas a tela ainda não tem onde mostrar o histórico. Quando a tela existir, a rota e o formato precisam ser detalhados como os deste guia. **Resolvido no serviço:** a rota existe, no formato da seção 11.5. A tela que a mostra fica para a fase 6.
+- **P16. Nome do jogador.** O nome no assento vem do campo `nome` do token, que é proposta do guia do login (P12 de lá). Se o usuário puder mudar de nome, o token antigo continua com o nome velho até vencer. Nomes repetidos também se confundem na mesa ([guia da mesa](guia-backend-mesa.md), P14). **Continua em aberto.** O Lobby usa o `nome` do token, e o Ranking guarda o nome que veio no evento da partida mais recente do jogador.
+- **P17. Prefixos no Nginx.** Decidir junto com o Auth se o gateway repassa o caminho inteiro, como este guia assume (guia do login, P15). `/api/ranking` precisa funcionar sem barra no fim, e `/interno` não pode ser exposto. **Resolvido:** o gateway repassa o caminho inteiro (`gateway/nginx.conf`), `/api/ranking` sem barra no fim, e `/interno` fica fora dele.
+- **P18. Um processo ou vários.** O exemplo trava tudo na memória e lê o Redis com um nome de consumidor fixo: os dois serviços precisam rodar com um processo só. Com o Postgres e as travas da seção 7.2, o Lobby pode ter mais processos; o consumidor do Ranking precisaria de um nome por processo. **Resolvido:** os dois serviços rodam com um processo só (Dockerfile sem `--workers`). As travas do Lobby ficam no Postgres e valeriam com vários processos; o que prende os dois a um processo é o nome fixo do consumidor de eventos (`lobby-1`, `ranking-1`).
+- **P19. Códigos de 401.** Os exemplos seguem o guia do login: `token_invalido` para token ausente ou inválido e `token_expirado` para token vencido. O mock responde `token_expirado` nos dois casos. A tela não lê o código, só o status, então a diferença só importa para quem lê os logs. **Resolvido:** adotado assim. Também recebem `token_invalido` um token cujo `sub` não é um UUID (o token de um bot, por exemplo) e, no Lobby, um token sem `nome`.
+
+## 11. Os serviços Lobby e Ranking de verdade
+
+Esta seção registra o que a implementação em `services/lobby/` e `services/ranking/` decidiu além do que as seções anteriores pedem. As rotas, os corpos, as respostas, os status e os códigos de erro são os das seções 3 a 5, sem mudança.
+
+### 11.1 Como os serviços estão montados
+
+| Parte | Onde | O que faz |
+|---|---|---|
+| Lobby | `services/lobby/app/` | `rotas.py` tem as rotas e as regras, na ordem das tabelas da seção 3; `banco.py`, o SQL; `game.py`, a chamada ao Game; `eventos.py`, a entrega do `bot.solicitado` e a leitura do `partida.finalizada`. |
+| Banco do Lobby | container `lobby-db` | Postgres só do Lobby, na `rede-lobby-db`: tabelas `salas`, `assentos` e `eventos_pendentes`. |
+| Ranking | `services/ranking/app/` | `rotas.py` com as duas rotas; `banco.py` com o SQL; `eventos.py` com a leitura e a conferência do `partida.finalizada`. |
+| Banco do Ranking | container `ranking-db` | Postgres só do Ranking, na `rede-ranking-db`: tabelas `partidas`, `participantes` e `jogadores`. |
+| Broker | container `eventos` | O mesmo Redis em que o Game publica. Os dois serviços entram na `rede-eventos`; nenhum deles alcança o `game-redis`. |
+
+- As tabelas são criadas pelo próprio serviço ao subir, com `CREATE TABLE IF NOT EXISTS`, como no Auth.
+- Os dois conferem o JWT sozinhos, com o `JWT_SEGREDO`, sem chamar o Auth.
+- O Lobby chama o Game só em `POST /interno/partidas`, pela `rede-servicos` (`GAME_URL=http://game:8000`), fora do gateway.
+- Cada serviço roda num processo só, com duas linhas de execução no Lobby (entrega e leitura de eventos) e uma no Ranking (leitura), ao lado das rotas (P18).
+- `/saude` responde 200 com o banco no ar. O broker não entra na conta: sem ele, as salas e o ranking continuam respondendo.
+- A página de testes do FastAPI de cada um abre pelo gateway: `http://localhost/api/lobby/docs` e `http://localhost/api/ranking/docs`.
+
+### 11.2 Lobby: regras e detalhes
+
+- **Token.** Além da assinatura e da validade, o `sub` precisa ser um UUID (os ids do Auth são) e o `nome`, um texto de 1 a 20 caracteres. Fora disso, 401 `token_invalido`. Assim o token de um bot (`bot-<partida>-<assento>`, guia da mesa 10.5) não entra no Lobby.
+- **O token vem antes de tudo.** O FastAPI lê o JSON do corpo antes de conferir o token; um pedido sem token e com o corpo quebrado receberia 422. O tratador de corpo inválido confere o token antes, e a resposta é 401, como pede a seção 5.2.
+- **Tipos estritos.** `assento` precisa ser um número JSON: `"1"` (texto), `true` ou `1.5` respondem 422 `dados_invalidos`. `formato` e `nivel` precisam ser texto.
+- **Id da sala.** Um `{id}` que nem é UUID responde 404 `sala_nao_encontrada`, como uma sala que nunca existiu.
+- **Travas (seção 6.8).** Toda alteração abre uma transação que trava o usuário (`pg_advisory_xact_lock(hashtext(usuario_id))`) e depois a sala (`SELECT ... FOR UPDATE`). No `iniciar`, a sala fica travada enquanto o Game responde, até 5 segundos: um "entrar" ao mesmo tempo espera e não muda os assentos de uma partida que já está sendo criada. Os `GET` não esperam.
+- **Presença (seção 6.5).** Conferida no começo de toda requisição, numa transação própria, com `FOR UPDATE SKIP LOCKED`: uma sala que outro pedido está alterando fica para a próxima conferência, em vez de segurar a requisição. O `GET` atrasado do próprio jogador não salva o assento: a conferência roda antes de renovar o prazo. Só o `GET` da sala renova; o da lista, não. Bots e salas em partida ficam fora.
+- **Dono que sai.** A sala passa a `"encerrada"` e o assento do dono fica vago. Os outros jogadores continuam nos assentos da sala encerrada, mas ela não conta para a regra de uma sala por vez: eles ficam livres para outra sala, e a tela deles volta para a lista com "A sala foi encerrada.".
+- **Nome dos bots.** "Bot 1", "Bot 2"..., o menor número livre na sala, e o nível guardado no assento (não vai na resposta).
+- **Iniciar.** O corpo enviado ao Game é o da seção 10.3 do guia da mesa, com os assentos como estão na sala. Qualquer falha do Game vira 503 `game_indisponivel` (P1), inclusive um 422 dele, que seria um defeito do Lobby: o detalhe fica no log (`docker compose logs lobby`).
+- **Depois da partida.** O `partida.finalizada` passa a sala para `"encerrada"`, com o `partida_id` ainda gravado (P12).
+
+### 11.3 Eventos do Lobby
+
+O formato é o do Game (guia da mesa, seção 10.4): um stream por evento e o evento em JSON no campo `dados`.
+
+`bot.solicitado`, publicado pelo Lobby quando a partida começa, um para cada assento de bot:
+
+```json
+{"partida_id": "84ab7cf6-1744-4d4f-8acd-84be98f4312e", "assento": 2, "nome": "Bot 1", "nivel": "padrao"}
+```
+
+- Além dos campos da seção 6.6, vai o `nome` do assento: o serviço de Bots precisa dele no token do bot (guia da mesa, 10.5).
+- Entrega: o evento entra na tabela `eventos_pendentes` do `lobby-db`, na mesma transação que grava a sala `"em_partida"` (ou os dois ficam gravados, ou nenhum). Uma linha de execução do Lobby passa a fila para o broker, na ordem, e só então apaga cada evento. Com o broker fora do ar, a partida começa e os eventos esperam (P13). Se o Lobby cair entre o envio e a retirada da fila, o evento sai de novo: o serviço de Bots precisa ignorar repetidos pelo `partida_id` e o `assento`.
+- Ninguém lê este evento até a fase 4. Para ver os publicados: `docker compose exec eventos redis-cli XRANGE bot.solicitado - +`.
+
+`partida.finalizada`, lido com o grupo `lobby` (consumidor `lobby-1`):
+
+- A sala com aquele `partida_id` e status `"em_partida"` passa a `"encerrada"`. O mesmo evento outra vez não acha mais a sala em partida e não muda nada: o consumo é idempotente pelo `partida_id`.
+- Uma partida sem sala no Lobby (a do script de teste do Game) é confirmada sem efeito.
+- O grupo é criado a partir do início do stream. Uma mensagem fora do formato vai para o log e é confirmada (`XACK`), para não travar a fila. Uma falha do banco deixa a mensagem pendente, e ela é lida de novo na próxima tentativa (a cada 5 segundos).
+
+`partida.criada` **não é lido pelo Lobby.** Ele repetiria o `partida_id` que o Lobby já recebe na resposta do `POST /interno/partidas` e grava na mesma transação; lido de forma assíncrona, poderia até chegar antes desse commit. Sem grupo `lobby` nesse stream, nada fica pendente no broker. Um caso que ele poderia ajudar fica sem tratamento: se o Game criar a partida e a resposta não chegar ao Lobby em 5 segundos, o dono recebe 503 e a sala continua `"aguardando"`. A partida órfã fica no Game sem ninguém conectar e é apagada depois de 7 dias parada.
+
+### 11.4 Ranking: registro das partidas
+
+- **Tabelas.** No lugar de `partidas_contadas` (seção 7.3), a tabela `partidas` guarda cada partida registrada (formato, sala, vencedor, placar e data), com o `partida_id` como chave. `participantes` guarda quem jogou cada uma, em que assento e time, bots inclusive. `jogadores` é a da seção 7.3, com as somas de cada humano. Os nomes são `TEXT`: vêm de outro serviço, e um nome maior que o esperado não pode travar a leitura dos eventos.
+- **Uma vez só.** Cada evento é gravado numa transação: `INSERT INTO partidas ... ON CONFLICT (partida_id) DO NOTHING` e, se a partida é nova, os participantes e as somas. Um evento repetido não insere nada e não soma nada.
+- **Eventos de antes do Ranking.** Na primeira vez, o grupo `ranking` é criado a partir do início do stream (id `"0"`): as partidas que o Game publicou antes de o serviço existir entram no ranking. Se o grupo sumir (o broker perdeu os dados), ele é criado de novo e tudo é relido, sem duplicar.
+- **Conferência do evento.** `partida_id`, `vencedor_time` (`"A"` ou `"B"`), `placar_final`, `encerrada_em` (ISO 8601; sem fuso, vale UTC) e, em cada jogador, `assento`, `nome` e `bot`; jogador humano sem `usuario_id`, assento ou jogador repetido invalidam o evento. Evento inválido vai para o log e é confirmado.
+- **Quem conta.** Jogadores com `bot: false`. Partidas contra bots contam normalmente (P14), e as do script de teste do Game (`sala_id` nulo) também: são partidas de verdade entre usuários do Auth.
+- **Nome.** O do evento mais recente do jogador.
+
+### 11.5 `GET /api/ranking/jogadores/{id}`
+
+Estatísticas e últimas partidas de um jogador (RF18). Qualquer usuário logado pode pedir a de qualquer jogador.
+
+Resposta, com status **200**:
+
+```json
+{
+  "usuario_id": "a712cd19-7914-4807-b5ee-a277fde52cee",
+  "nome": "Ana",
+  "posicao": 1,
+  "vitorias": 1,
+  "derrotas": 1,
+  "partidas": 2,
+  "ultimas_partidas": [
+    {
+      "partida_id": "98b32790-8440-491c-a662-b983693b2411",
+      "formato": "2x2",
+      "encerrada_em": "2026-10-28T15:30:00+00:00",
+      "time": "A",
+      "venceu": false,
+      "placar_final": {"A": 9, "B": 12},
+      "times": {
+        "A": [
+          {"assento": 0, "usuario_id": "a712cd19-7914-4807-b5ee-a277fde52cee", "nome": "Ana", "bot": false},
+          {"assento": 2, "usuario_id": null, "nome": "Bot 1", "bot": true}
+        ],
+        "B": [
+          {"assento": 1, "usuario_id": "7871a853-f35d-42c5-8dd1-e78533f7b4ef", "nome": "Beto", "bot": false},
+          {"assento": 3, "usuario_id": "5f1c9a2e-3b7d-4e8a-9c61-0d2e4f8a7b13", "nome": "Caio", "bot": false}
+        ]
+      }
+    }
+  ]
+}
+```
+
+| Campo | O que é |
+|---|---|
+| `posicao`, `vitorias`, `partidas` | Os mesmos da linha do ranking (seção 4.4), com a posição calculada do mesmo jeito. |
+| `derrotas` | `partidas - vitorias`. |
+| `ultimas_partidas` | As 10 mais recentes, da mais nova para a mais antiga (`ULTIMAS_PARTIDAS`, em `services/ranking/app/config.py`). |
+| `time`, `venceu` | O time do jogador naquela partida e se ele venceu. |
+| `placar_final`, `times` | Como no `partida.finalizada` (guia da mesa, 10.4), com os bots. |
+
+| Erro | Status | `erro` |
+|---|---|---|
+| Token | 401 | `token_invalido` ou `token_expirado` |
+| Jogador que nunca jogou (ou id que não existe) | 404 | `jogador_nao_encontrado` ("Este jogador ainda não tem partidas registradas.") |
+
+### 11.6 Testes
+
+Rodam dentro do container, com o Postgres e o broker de verdade:
+
+```bash
+docker compose run --rm --build lobby pytest
+docker compose run --rm --build ranking pytest
+```
+
+- Cada serviço usa um banco de teste no próprio Postgres (`lobby_teste` e `ranking_teste`, criados sozinhos) e um banco lógico próprio do broker (2 no Lobby, 3 no Ranking; o Game usa o 1 e os serviços, o 0). Não mexem nas salas, no ranking nem nos eventos de quem está usando o sistema.
+- Os do Lobby usam um Game falso, um servidor HTTP dentro do próprio teste, no lugar do `POST /interno/partidas`: assim dá para simular o Game fora do ar, lento ou respondendo errado, e nenhuma partida é criada no Game de verdade.
+- Os dois cobrem as rotas e a ordem dos erros, as travas com pedidos ao mesmo tempo, a presença (mudando a hora do último `GET` direto no banco), a entrega do `bot.solicitado` com o broker fora do ar, e a leitura do `partida.finalizada`: repetido, fora do formato, publicado com o serviço parado, lido e não confirmado antes de uma queda e, no Ranking, publicado antes de o serviço existir.
+
+### 11.7 Divergências e acréscimos em relação às seções anteriores
+
+- **`bot.solicitado` traz `nome`**, além de `partida_id`, `assento` e `nivel` (seção 11.3).
+- **Tabelas do Ranking:** `partidas` e `participantes` no lugar de `partidas_contadas`, e nomes em `TEXT` (seção 11.4). **Tabela nova no Lobby:** `eventos_pendentes`.
+- **Token:** `sub` precisa ser UUID nos dois serviços, e o Lobby exige o `nome` (P19).
+- **401 antes de 422** mesmo com o corpo quebrado (seção 11.2).
+- **Sala encerrada pelo dono** mantém os outros jogadores nos assentos (seção 11.2); **sala encerrada pela partida** mantém o `partida_id` (P12).
+- **Presença** conferida por requisição, pulando as salas travadas (seção 11.2).
+- **`GET /api/ranking/jogadores/{id}`** com formato definido (seção 11.5) e 404 `jogador_nao_encontrado`, código que não estava na seção 5.2.
+- **Os exemplos das seções 8 e 9** continuam valendo como material de estudo, com o segredo de teste deles. Com o sistema no Docker Compose, os serviços usam o `JWT_SEGREDO` do `.env`, e um token gerado como na seção 9.1 só vale se for assinado com ele.
