@@ -9,25 +9,42 @@
 #   o único que o computador (host) enxerga. Os serviços e os bancos não publicam porta nenhuma.
 # - Cada serviço é independente: tem o seu diretório em services/<nome>/, o seu Dockerfile e o
 #   seu código. Um serviço nunca importa código de outro.
-# - Cada serviço que guarda dados tem o SEU banco, num container Postgres próprio, com volume e
+# - Cada serviço que guarda dados tem o SEU banco, num container próprio, com volume e
 #   credenciais próprios. Nenhum serviço conecta no banco de outro.
 #
 # As redes garantem essas regras (um container só alcança quem está numa rede em comum):
 #
-#   rede-servicos   gateway + todos os serviços. É por ela que o gateway repassa as requisições
-#                   e que os serviços conversam entre si (HTTP, WebSocket, eventos).
-#   rede-auth-db    auth + auth-db, e mais ninguém. Marcada como "internal": não tem saída para
-#                   fora do Docker. O gateway nem consegue achar o nome "auth-db".
+#   rede-servicos    gateway + todos os serviços. É por ela que o gateway repassa as requisições
+#                    e que os serviços conversam entre si por HTTP e WebSocket.
+#   rede-auth-db     auth + auth-db, e mais ninguém. Marcada como "internal": não tem saída para
+#                    fora do Docker. O gateway nem consegue achar o nome "auth-db".
+#   rede-game-redis  game + game-redis, e mais ninguém (internal), no mesmo padrão.
+#   rede-eventos     game + eventos (internal). Nas próximas fases, lobby, ranking e bots também
+#                    entram nela. O gateway e o auth não entram.
 #
 #        navegador
 #            |  porta ${GATEWAY_PORTA} (padrão 80)
 #        [gateway] ----- rede-servicos ----- [auth] ----- rede-auth-db ----- [auth-db]
+#                              |
+#                              +------------ [game] ----- rede-game-redis -- [game-redis]
+#                                               |
+#                                               +-------- rede-eventos ----- [eventos]
+#
+# game-redis e eventos: dois Redis com papéis diferentes
+# - game-redis é o BANCO do Game, como o auth-db é o do Auth: guarda o estado das partidas (e a
+#   fila de eventos ainda não entregues). É dado do Game, e nenhum outro serviço o acessa.
+# - eventos é o BROKER, o meio de comunicação entre os serviços: o Game publica nele os eventos
+#   partida.criada e partida.finalizada (Redis Streams, um stream por evento), e os outros
+#   serviços vão lê-los. Não guarda dado de ninguém: só as mensagens em trânsito.
+#   Separados, um serviço que lê eventos nunca enxerga as partidas, e o Game continua jogando
+#   mesmo com o broker fora do ar (os eventos esperam na fila do game-redis).
 #
 # Nas próximas fases, repita o padrão para cada serviço novo:
 # - o serviço entra na rede-servicos (para receber as requisições do gateway);
 # - se ele tiver banco, crie um container <servico>-db, uma rede rede-<servico>-db (internal)
 #   só com os dois, um volume <servico>-db-dados e variáveis <SERVICO>_DB_* no .env.
-#   Exemplos: lobby + lobby-db em rede-lobby-db; ranking + ranking-db em rede-ranking-db.
+#   Exemplos: lobby + lobby-db em rede-lobby-db; ranking + ranking-db em rede-ranking-db;
+# - se ele publica ou lê eventos, entra também na rede-eventos e recebe EVENTOS_* como o game.
 # ---------------------------------------------------------------------------------------------
 
 # Nome fixo do projeto: os containers, as redes e os volumes ganham o prefixo "truco-online",
@@ -35,7 +52,8 @@
 name: truco-online
 
 services:
-  # Gateway: entrega os arquivos do frontend e repassa /api/... a cada serviço (gateway/nginx.conf).
+  # Gateway: entrega os arquivos do frontend, repassa /api/... a cada serviço e /ws/ ao Game
+  # (gateway/nginx.conf).
   gateway:
     image: nginx:1.30-alpine
     restart: unless-stopped
@@ -49,6 +67,8 @@ services:
       - rede-servicos
     depends_on:
       auth:
+        condition: service_healthy
+      game:
         condition: service_healthy
 
   # Serviço Auth: cadastro, login e emissão do JWT (docs/guia-backend-login.md).
@@ -101,11 +121,94 @@ services:
       start_period: 30s
       start_interval: 2s
 
+  # Serviço Game: regras do truco, estado das partidas, WebSocket da mesa e eventos
+  # (docs/guia-backend-mesa.md). Roda num processo só (explicação em app/partidas.py).
+  # Recebe do gateway o /ws/ e, dos outros serviços, o POST /interno/partidas (rede-servicos).
+  game:
+    build: ./services/game
+    restart: unless-stopped
+    environment:
+      JWT_SEGREDO: ${JWT_SEGREDO:?defina JWT_SEGREDO no .env (copie o .env.example)}
+      # O banco do Game é o game-redis. Como no Auth, o serviço lê sempre BANCO_*.
+      BANCO_HOST: game-redis
+      BANCO_PORTA: "6379"
+      BANCO_SENHA: ${GAME_REDIS_SENHA:?defina GAME_REDIS_SENHA no .env (copie o .env.example)}
+      # O broker de eventos (Redis Streams), compartilhado com os serviços que leem os eventos.
+      EVENTOS_HOST: eventos
+      EVENTOS_PORTA: "6379"
+      EVENTOS_SENHA: ${EVENTOS_SENHA:?defina EVENTOS_SENHA no .env (copie o .env.example)}
+    networks:
+      - rede-servicos
+      - rede-game-redis
+      - rede-eventos
+    depends_on:
+      game-redis:
+        condition: service_healthy
+      eventos:
+        condition: service_healthy
+    # GET /saude responde 200 quando o serviço está no ar e alcança o game-redis.
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/saude', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+      start_interval: 2s
+
+  # Banco do Game: estado das partidas. Só o serviço game chega até ele (rede-game-redis).
+  # --appendonly yes grava cada mudança em disco (no volume): as partidas sobrevivem a um
+  # reinício do container. A senha vem do .env; o REDISCLI_AUTH deixa o redis-cli do próprio
+  # container (healthcheck e "docker compose exec game-redis redis-cli") entrar sem digitá-la.
+  game-redis:
+    image: redis:8.2-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${GAME_REDIS_SENHA:?defina GAME_REDIS_SENHA no .env (copie o .env.example)}"]
+    environment:
+      REDISCLI_AUTH: ${GAME_REDIS_SENHA:?defina GAME_REDIS_SENHA no .env (copie o .env.example)}
+    volumes:
+      - game-redis-dados:/data
+    networks:
+      - rede-game-redis
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping | grep -q PONG"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+      start_interval: 2s
+
+  # Broker de eventos: Redis dedicado à comunicação entre os serviços, com Redis Streams.
+  # Nesta fase só o game publica; lobby, ranking e bots vão se conectar pela rede-eventos.
+  # Também grava em disco: um evento publicado espera no stream até o consumidor ler.
+  eventos:
+    image: redis:8.2-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${EVENTOS_SENHA:?defina EVENTOS_SENHA no .env (copie o .env.example)}"]
+    environment:
+      REDISCLI_AUTH: ${EVENTOS_SENHA:?defina EVENTOS_SENHA no .env (copie o .env.example)}
+    volumes:
+      - eventos-dados:/data
+    networks:
+      - rede-eventos
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping | grep -q PONG"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+      start_interval: 2s
+
 networks:
   rede-servicos: {}
   rede-auth-db:
     internal: true
+  rede-game-redis:
+    internal: true
+  rede-eventos:
+    internal: true
 
 volumes:
-  # Dados do banco do Auth. Sobrevivem a "docker compose down"; só "down -v" apaga.
+  # Dados de cada banco. Sobrevivem a "docker compose down"; só "down -v" apaga.
   auth-db-dados:
+  game-redis-dados:
+  eventos-dados:
