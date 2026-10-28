@@ -10,7 +10,7 @@ import { obterToken, obterUsuario, sair } from "./auth.js";
 // formato do contrato (ver "MOCK DO SERVIÇO AUTH", no fim do arquivo).
 // Com false, as mesmas funções chamam o backend real, sem nenhuma outra mudança no código.
 // =====================================================================================
-const USAR_MOCK = true;
+const USAR_MOCK = false;
 
 // =====================================================================================
 // PROVISÓRIO — REMOVER quando os serviços Lobby e Ranking existirem.
