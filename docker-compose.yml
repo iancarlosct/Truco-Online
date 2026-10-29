@@ -64,7 +64,8 @@
 # ---------------------------------------------------------------------------------------------
 
 # Nome fixo do projeto: os containers, as redes e os volumes ganham o prefixo "truco-online",
-# qualquer que seja o nome da pasta do repositório.
+# qualquer que seja o nome da pasta do repositório. O testes.sh sobe este mesmo arquivo com
+# outro nome (docker compose -p truco-testes): outro conjunto de containers, redes e volumes.
 name: truco-online
 
 services:
@@ -303,6 +304,10 @@ services:
       EVENTOS_SENHA: ${EVENTOS_SENHA:?defina EVENTOS_SENHA no .env (copie o .env.example)}
       # Opcional: com um valor, cada bot repete as mesmas escolhas nas mesmas situações.
       BOTS_SEMENTE: ${BOTS_SEMENTE:-}
+      # Nome do projeto do Docker Compose ("truco-online", ou "truco-testes" no ambiente de
+      # testes do testes.sh). O serviço não o usa: os testes de serviço dos Bots o conferem para
+      # não jogar partidas nos bancos de quem usa o sistema (tests/servico/conftest.py).
+      PROJETO_COMPOSE: ${COMPOSE_PROJECT_NAME}
     networks:
       - rede-servicos
       - rede-eventos

@@ -1,7 +1,16 @@
-"""Preparação dos testes do serviço. Rodam dentro do container, com os serviços de verdade no ar:
+"""Preparação dos testes do serviço. Rodam dentro do container, com os serviços de verdade no ar,
+no ambiente de testes isolado (o projeto "truco-testes" do Docker Compose, com bancos próprios):
 
-    docker compose up -d --build
-    docker compose run --rm bots pytest
+    ./testes.sh bots
+
+ou, passo a passo, a partir da raiz do repositório:
+
+    docker compose -p truco-testes up -d --build --wait auth game lobby ranking bots
+    docker compose -p truco-testes run --rm --no-deps bots pytest
+    docker compose -p truco-testes down -v
+
+Eles criam salas, partidas e linhas no ranking de verdade, por isso não rodam no projeto
+"truco-online", o do sistema em uso: lá, o fixture sistema_no_ar os faz falhar com um aviso.
 
 Há dois tipos de teste:
 
@@ -17,7 +26,7 @@ Há dois tipos de teste:
   partida e repetir o pedido, sem que o serviço no ar veja essas partidas.
 
 Todos usam a mesma pessoa de teste, "Teste dos Bots", com um id fixo. As partidas que terminam
-contam para ela no ranking, como as do script de teste do Game.
+contam para ela no ranking do ambiente de testes, que é apagado no fim do testes.sh.
 """
 
 import os
@@ -80,16 +89,27 @@ def esperar(condicao, limite: float, motivo: str = "a condição"):
     raise AssertionError(f"{motivo} não aconteceu em {limite} s")
 
 
+# Projeto do Docker Compose em que o teste está rodando (docker-compose.yml, serviço bots).
+PROJETO_COMPOSE = os.environ.get("PROJETO_COMPOSE", "")
+PROJETO_DO_SISTEMA = "truco-online"
+
+
 @pytest.fixture(scope="session")
 def sistema_no_ar():
-    """Os testes precisam do Game, do Lobby, do Ranking e do serviço bots no ar."""
+    """Os testes precisam do Game, do Lobby, do Ranking e do serviço bots no ar, no ambiente de
+    testes: no projeto do sistema em uso, eles gravariam salas, partidas e ranking de verdade."""
+    if PROJETO_COMPOSE == PROJETO_DO_SISTEMA:
+        pytest.fail(
+            "Os testes de serviço dos Bots gravam salas, partidas e ranking nos bancos. Rode-os no "
+            "ambiente de testes isolado: ./testes.sh bots (README, seção Testes)."
+        )
     for nome, url in [("game", GAME_URL), ("lobby", LOBBY_URL), ("ranking", RANKING_URL), ("bots", BOTS_URL)]:
         try:
             status, _ = pedir("GET", f"{url}/saude")
         except OSError:
             status = None
         if status != 200:
-            pytest.fail(f"O serviço {nome} não está no ar. Suba o sistema antes: docker compose up -d --build")
+            pytest.fail(f"O serviço {nome} não está no ar. Rode pelo ambiente de testes: ./testes.sh bots")
 
 
 # ---------- Broker ----------
