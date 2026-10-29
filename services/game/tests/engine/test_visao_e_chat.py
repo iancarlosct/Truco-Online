@@ -50,6 +50,21 @@ def test_carta_coberta_vai_sem_o_valor_para_todos_e_em_todas_as_rodadas():
     assert estado["mao_atual"]["rodadas"][1]["jogadas"][0]["carta"] == "3E"
 
 
+def test_rodadas_trazem_o_assento_da_carta_vencedora():
+    estado = nova_partida(maos=[["4O", "7O", "QO"], ["3C", "3E", "5C"]], vira=VIRA)
+    estado = jogar(estado, 0, "4O")
+    assert visao_do_jogador(estado, 0)["mao_atual"]["rodadas"][0]["vencedor_assento"] is None  # em andamento
+
+    estado = jogar(estado, 1, "3C")
+    for assento in (0, 1):
+        rodada = visao_do_jogador(estado, assento)["mao_atual"]["rodadas"][0]
+        assert (rodada["vencedor_time"], rodada["vencedor_assento"]) == ("B", 1)
+
+    # Partida gravada antes de o campo existir: a visão manda null.
+    del estado["mao_atual"]["rodadas"][0]["vencedor_assento"]
+    assert visao_do_jogador(estado, 0)["mao_atual"]["rodadas"][0]["vencedor_assento"] is None
+
+
 def test_vencedor_time_so_aparece_com_a_partida_encerrada():
     estado = nova_partida()
     assert "vencedor_time" not in visao_do_jogador(estado, 0)

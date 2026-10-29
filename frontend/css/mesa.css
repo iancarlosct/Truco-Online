@@ -373,8 +373,8 @@ body {
   --giro: 6deg;
 }
 
-/* Rodada decidida: as cartas do time vencedor vêm para a frente, sobem um pouco e ganham um
-   contorno na cor do time */
+/* Rodada decidida: a carta vencedora vem para a frente, sobe um pouco e ganha um contorno na
+   cor do time */
 .jogada.vencedora {
   z-index: 1;
   translate: 0 calc(var(--l) * -0.1);

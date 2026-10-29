@@ -24,7 +24,7 @@
 const DURACAO_MOVIMENTO_MS = 300; // carta indo para a mesa, cartas da mão se ajeitando
 const INTERVALO_DISTRIBUICAO_MS = 60; // entre uma carta e a seguinte, na distribuição
 const DURACAO_AVISO_TRUCO_MS = 1000; // o pedido em destaque, do surgimento até sumir
-const DURACAO_DESTAQUE_MS = 300; // cartas do time vencedor subindo, marcador da rodada pulsando
+const DURACAO_DESTAQUE_MS = 300; // carta vencedora subindo, marcador da rodada pulsando
 const DURACAO_PLACAR_MS = 450; // contagem dos pontos
 const DURACAO_FIM_MS = 400; // entrada da tela de fim de partida (na derrota, 1,5 vez isso)
 const DURACAO_CONFETES_MS = [1400, 2200]; // queda de cada confete, sorteada no intervalo
@@ -221,10 +221,9 @@ function distribuir(raiz, estado, reduzir) {
   });
 }
 
-// Rodada decidida: as cartas do time vencedor (já desenhadas em destaque pela mesa) sobem e o
-// contorno aparece, depois que a última carta chega; o marcador da rodada pulsa. No empate,
-// as cartas ficam como estão e só o marcador, cinza, pulsa: o estado não diz quais cartas
-// empataram.
+// Rodada decidida: a carta vencedora (já desenhada em destaque pela mesa) sobe e o contorno
+// aparece, depois que a última carta chega; o marcador da rodada pulsa. No empate, as cartas
+// ficam como estão e só o marcador, cinza, pulsa.
 function destacarRodada(raiz, indice, atraso) {
   const opcoes = { duration: DURACAO_DESTAQUE_MS, delay: atraso, easing: CURVA_MOVIMENTO, fill: "backwards" };
   for (const jogada of raiz.querySelectorAll(".jogada.vencedora")) {

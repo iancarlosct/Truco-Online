@@ -14,6 +14,8 @@ cobertas, com o valor de verdade: quem esconde o que cada jogador não pode ver 
         "aguardando_decisao_mao_de_onze", "rodadas", "vez_assento",
         "encerrada": False,  # só do servidor: a mão acabou e a próxima ainda não foi distribuída
       },
+      # cada item de "rodadas":
+      #   {"jogadas": [{"assento", "carta", "coberta"}], "vencedor_time", "vencedor_assento"}
       "chat": [{"de", "texto"}],
     }
 
@@ -234,7 +236,7 @@ def _jogar_carta(estado: dict, jogador: dict, mensagem: dict) -> None:
     jogador["mao"].remove(carta)
     rodadas = mao["rodadas"]
     if not rodadas or rodadas[-1]["vencedor_time"]:
-        rodadas.append({"jogadas": [], "vencedor_time": None})
+        rodadas.append({"jogadas": [], "vencedor_time": None, "vencedor_assento": None})
     rodada = rodadas[-1]
     rodada["jogadas"].append({"assento": jogador["assento"], "carta": carta, "coberta": coberta})
 
@@ -243,9 +245,11 @@ def _jogar_carta(estado: dict, jogador: dict, mensagem: dict) -> None:
         mao["vez_assento"] = (jogador["assento"] + 1) % quantidade
         return
 
-    # Rodada completa: vencedor da rodada e, se já der, da mão.
+    # Rodada completa: vencedor da rodada e, se já der, da mão. Fora do empate, quem abre a
+    # próxima é quem jogou a carta vencedora: é ela que a mesa destaca (vencedor_assento).
     vencedor, abre_a_proxima = resultado_da_rodada(rodada["jogadas"], manilha(mao["vira"]))
     rodada["vencedor_time"] = vencedor
+    rodada["vencedor_assento"] = None if vencedor == "empate" else abre_a_proxima
     vencedor_da_mao = resultado_da_mao([r["vencedor_time"] for r in rodadas])
     if vencedor_da_mao is None:
         mao["vez_assento"] = abre_a_proxima

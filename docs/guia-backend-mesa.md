@@ -66,7 +66,7 @@ Na ordem recomendada. Cada etapa termina em algo que dá para ver funcionando. O
 
 - [x] Partida criada já com a primeira mão distribuída: todo `estado` precisa de `mao_atual` (seção 3.3).
 - [x] `jogar_carta` com validação e atualização de `rodadas`, `qtd_cartas` e `vez_assento`.
-- [x] Fim de rodada (`vencedor_time`), com a rodada seguinte criada só na primeira carta dela (seção 6.4).
+- [x] Fim de rodada (`vencedor_time` e `vencedor_assento`), com a rodada seguinte criada só na primeira carta dela (seção 6.4).
 - [x] Fim de mão: `placar` atualizado e, depois de uns 2 segundos, nova mão (`numero`, `pe`, `vira`, cartas e `valor` inicial).
 - [x] `pedir_truco` e `responder_truco`, mantendo `valor`, `truco_pendente` e `ultimo_aumento_time`.
 - [x] Ação inválida não muda o estado e gera `erro` só para quem enviou, com um dos códigos da seção 6.2.
@@ -236,6 +236,7 @@ A tela posiciona cada jogador pela diferença entre o `assento` dele e o `meu_as
 |---|---|---|---|
 | `jogadas` | lista | Não | Cartas jogadas na rodada, **na ordem em que foram jogadas** (as últimas são desenhadas por cima). Ausente equivale a `[]`. |
 | `vencedor_time` | texto ou `null` | Não | `"A"`, `"B"`, `"empate"` ou `null` enquanto a rodada está em andamento. Ausente equivale a `null`. |
+| `vencedor_assento` | inteiro ou `null` | Não | Assento de quem jogou a carta vencedora. `null` enquanto a rodada está em andamento e no empate. A tela destaca só a carta desse assento; ausente, nenhuma carta fica em destaque. Se os dois parceiros jogam a carta mais forte do time com a mesma força, vale a jogada primeiro, que também abre a rodada seguinte (seção 10.2). |
 
 **Cada item de `jogadas`**
 
@@ -257,6 +258,7 @@ A tela posiciona cada jogador pela diferença entre o `assento` dele e o `meu_as
 - No centro da mesa aparecem **só as cartas do último item** da lista. Como a rodada nova só é criada com a primeira carta dela, a rodada que acabou de terminar continua na mesa até alguém abrir a seguinte.
 - A tela calcula a rodada da próxima carta: se a lista está vazia ou o último item já tem `vencedor_time`, é a rodada seguinte; senão, é a do último item.
 - Os três marcadores de rodada usam o `vencedor_time` das três primeiras posições: cor do time, cinza para `"empate"`, vazio para `null`. A rodada da próxima carta ganha um contorno de "rodada atual", se alguém tem a vez.
+- Na rodada decidida que continua na mesa, a carta do `vencedor_assento` sobe um pouco e ganha um contorno na cor do time. No 2x2, é só a carta vencedora, não as duas do time.
 - A opção "Jogar coberta" fica disponível quando a próxima carta é da segunda rodada em diante. Marcada, as cartas da mão aparecem com a cor do verso por cima e o aviso "Coberta".
 
 ### 4.2 Cartas
@@ -318,7 +320,7 @@ A barra de ações também mostra uma frase que depende do estado. Ela ajuda a c
 
 ### 4.5 Exemplo completo
 
-Partida 2x2 na segunda rodada, enviada ao jogador do assento 0. A primeira rodada foi vencida pelo time A, a Maria abriu a segunda com uma carta coberta e agora é a vez do João.
+Partida 2x2 na segunda rodada, enviada ao jogador do assento 0. A primeira rodada foi vencida pelo time A, com o valete de paus da Maria (a vira é a dama, então o valete é a manilha); a Maria abriu a segunda com uma carta coberta e agora é a vez do João.
 
 ```json
 {
@@ -351,13 +353,15 @@ Partida 2x2 na segunda rodada, enviada ao jogador do assento 0. A primeira rodad
           {"assento": 2, "carta": "JP", "coberta": false},
           {"assento": 3, "carta": "AC", "coberta": false}
         ],
-        "vencedor_time": "A"
+        "vencedor_time": "A",
+        "vencedor_assento": 2
       },
       {
         "jogadas": [
           {"assento": 2, "carta": null, "coberta": true}
         ],
-        "vencedor_time": null
+        "vencedor_time": null,
+        "vencedor_assento": null
       }
     ],
     "vez_assento": 3
@@ -421,7 +425,7 @@ O que o servidor faz:
 
 1. Confere que é a vez do jogador, que não há truco nem decisão de mão de onze pendente, que a carta está na mão dele e que `coberta` só vem `true` a partir da segunda rodada.
 2. Tira a carta da mão e acrescenta a jogada ao final de `jogadas` da rodada atual. Se a lista está vazia ou a última rodada já tem vencedor, cria antes a rodada nova, com esta carta como a primeira jogada. Depois passa `vez_assento` para o próximo.
-3. Se a rodada terminou, preenche `vencedor_time` e passa `vez_assento` para quem abre a próxima, ou encerra a mão (seção 6.4).
+3. Se a rodada terminou, preenche `vencedor_time` e `vencedor_assento` e passa `vez_assento` para quem abre a próxima, ou encerra a mão (seção 6.4).
 4. Envia o novo `estado` a todos.
 
 Um clique duplo pode gerar duas mensagens seguidas. A segunda deve ser recusada como qualquer jogada fora da vez (`fora_da_vez`).
@@ -533,7 +537,7 @@ A tela mostra a `mensagem` por 4 segundos na barra de ações, no lugar da frase
 
 A tela não tem animação nem pausa própria. Ela mostra o último `estado` recebido e, no centro, só a última rodada da lista. Por isso a ordem e o ritmo dos estados ficam com o servidor:
 
-1. **Fim de rodada.** O estado sai com a rodada completa, `vencedor_time` preenchido e `vez_assento` em quem abre a próxima. A rodada nova **não** entra em `rodadas` agora: ela só é criada quando a primeira carta dela for jogada (seção 5.1). Assim a rodada encerrada continua na mesa até alguém abrir a seguinte, sem pausa nenhuma.
+1. **Fim de rodada.** O estado sai com a rodada completa, `vencedor_time` e `vencedor_assento` preenchidos e `vez_assento` em quem abre a próxima. A rodada nova **não** entra em `rodadas` agora: ela só é criada quando a primeira carta dela for jogada (seção 5.1). Assim a rodada encerrada continua na mesa até alguém abrir a seguinte, sem pausa nenhuma.
 2. **Fim de mão.** O estado sai com a última rodada completa, o `placar` atualizado e `"vez_assento": null` (a tela mostra "Fim da mão."). O servidor espera uns 2 segundos e só então envia a mão nova: `numero`, `pe`, `vira`, cartas, `valor` inicial e `"rodadas": []`. Use `await asyncio.sleep(2)`. Nunca use `time.sleep`, que trava o servidor inteiro, para todas as partidas. Durante a pausa o chat continua funcionando, e as outras ações recebem `erro`.
 3. **Fim de partida.** Quando um time chega a 12, o estado sai na hora com `"status": "encerrada"`, `vencedor_time` e a última mão em `mao_atual`, com `"vez_assento": null`. Não há mão nova. A tela mostra sobre a mesa o resultado, o placar final e o botão "Voltar ao lobby". Daí em diante só o chat vale, e quem conectar recebe o mesmo estado encerrado.
 
@@ -1037,6 +1041,7 @@ Quem assina esse token e joga pelos bots é o serviço de Bots, desde a fase 4 (
 - **Placar limitado a 12** e **três rodadas empatadas sem ponto** (seção 10.2). O documento de contratos não trata esses casos; o servidor simulado da tela faz o mesmo.
 - **`POST /interno/partidas` responde 201.** O guia do lobby pede só o corpo `{"partida_id"}`; o exemplo do Lobby aceita qualquer status 2xx.
 - **`partida.finalizada` traz `assento` e `bot`** em cada jogador de `times`, além do proposto.
+- **`vencedor_assento` em cada rodada**, acrescentado no fechamento do projeto: o assento da carta vencedora, calculado pelo motor (`engine/regras.py`), `null` no empate e com a rodada em andamento. A tela o usa para destacar só a carta vencedora no 2x2 (seção 4.1). Uma partida gravada antes do campo existir sai com `null` nas rodadas antigas.
 - **Partida parada por 7 dias é apagada** do `game-redis`; depois disso, quem tentar conectar recebe 4404.
 
 ### 10.7 O serviço de Bots

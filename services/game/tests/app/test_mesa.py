@@ -1,11 +1,13 @@
 """WebSocket da mesa: recusas, visão de cada jogador, ações, reconexão, conexão substituída,
 pausa entre as mãos e fim da partida (docs/guia-backend-mesa.md)."""
 
+import logging
 from datetime import timedelta
 
 import pytest
 from starlette.websockets import WebSocketDisconnect
 
+from app.seguranca import SemTokenNoLog
 from tests.app.conftest import (
     ANA,
     ASSENTOS_1X1,
@@ -50,6 +52,16 @@ def jogar(ws, carta, coberta=False):
 def test_token_invalido_fecha_com_4401(cliente, token_pronto):
     partida_id = criar_partida(cliente)
     assert fechamento(cliente, partida_id, token_pronto=token_pronto) == (4401, "token inválido")
+
+
+def test_o_token_nao_aparece_no_log_da_conexao():
+    # A mesma linha que o Uvicorn escreve a cada conexão WebSocket.
+    registro = logging.LogRecord(
+        "uvicorn.error", logging.INFO, __file__, 0, '%s - "WebSocket %s" [accepted]',
+        ("172.18.0.5:41234", "/ws/partidas/p1?token=eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJhbmEifQ.assinatura"), None,
+    )
+    assert SemTokenNoLog().filter(registro) is True
+    assert registro.getMessage() == '172.18.0.5:41234 - "WebSocket /ws/partidas/p1?token=***" [accepted]'
 
 
 def test_sem_token_fecha_com_4401(cliente):
@@ -108,7 +120,7 @@ def test_jogada_valida_vai_para_todos_e_a_recusada_so_para_quem_enviou(cliente, 
         # A próxima mensagem da Ana é o estado depois da jogada: o erro do Beto não chegou a ela.
         assert para_ana["tipo"] == para_beto["tipo"] == "estado"
         assert para_ana["mao_atual"]["rodadas"] == [
-            {"jogadas": [{"assento": 0, "carta": "3O", "coberta": False}], "vencedor_time": None}
+            {"jogadas": [{"assento": 0, "carta": "3O", "coberta": False}], "vencedor_time": None, "vencedor_assento": None}
         ]
         assert para_ana["jogadores"][0]["mao"] == ["3E", "4O"]
         assert para_beto["jogadores"][0] == {"assento": 0, "nome": "Ana", "time": "A", "bot": False, "qtd_cartas": 2}

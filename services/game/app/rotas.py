@@ -1,7 +1,7 @@
 """Rotas do Game: a criação da partida, chamada pelo Lobby, e o WebSocket da mesa.
 
 O gateway repassa ao Game só o /ws/. A rota /interno/partidas fica fora dele: só os containers
-da rede-servicos a alcançam (o Lobby, nas próximas fases).
+da rede-servicos a alcançam (o Lobby, ao iniciar uma sala).
 """
 
 from fastapi import APIRouter, Request, WebSocket

@@ -29,7 +29,8 @@ const MOTIVO_RECUSA = {
 
 // ws://<endereço da página>/ws/partidas/{partida_id}?token=<jwt>, ou wss:// com HTTPS: o
 // gateway repassa o /ws/ ao Game. O token vai na URL porque o navegador não deixa pôr
-// cabeçalhos num WebSocket; o gateway não o grava no log de acesso (gateway/nginx.conf).
+// cabeçalhos num WebSocket. O gateway (gateway/nginx.conf) e o Game (app/seguranca.py) não o
+// gravam nos logs.
 function enderecoDaPartida(partidaId, token) {
   const protocolo = location.protocol === "https:" ? "wss:" : "ws:";
   const caminho = `/ws/partidas/${encodeURIComponent(partidaId)}`;

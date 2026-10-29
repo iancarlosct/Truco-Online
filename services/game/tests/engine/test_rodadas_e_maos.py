@@ -94,6 +94,7 @@ def test_rodada_nova_so_entra_na_lista_com_a_primeira_carta():
     mao = estado["mao_atual"]
     assert len(mao["rodadas"]) == 1
     assert mao["rodadas"][0]["vencedor_time"] == "B"
+    assert mao["rodadas"][0]["vencedor_assento"] == 1
     assert mao["vez_assento"] == 1  # quem venceu a rodada abre a próxima
 
     estado = jogar(estado, 1, "4C")
@@ -101,6 +102,7 @@ def test_rodada_nova_so_entra_na_lista_com_a_primeira_carta():
     assert estado["mao_atual"]["rodadas"][1] == {
         "jogadas": [{"assento": 1, "carta": "4C", "coberta": False}],
         "vencedor_time": None,
+        "vencedor_assento": None,
     }
     assert estado["mao_atual"]["vez_assento"] == 0
 
@@ -148,6 +150,7 @@ def test_primeira_empatada_quem_abriu_abre_a_segunda_e_quem_vencer_leva():
 
     estado = jogar_em_ordem(estado, "KO", "KC")
     assert estado["mao_atual"]["rodadas"][0]["vencedor_time"] == "empate"
+    assert estado["mao_atual"]["rodadas"][0]["vencedor_assento"] is None
     assert estado["mao_atual"]["vez_assento"] == 0
 
     estado = jogar_em_ordem(estado, "4O", "3C")
@@ -185,7 +188,23 @@ def test_no_2x2_a_vez_anda_pela_numeracao_dos_assentos():
 
     assert vezes == [0, 1, 2, 3]
     assert estado["mao_atual"]["rodadas"][0]["vencedor_time"] == "A"
-    assert estado["mao_atual"]["vez_assento"] == 2  # o 3O do assento 2 venceu
+    assert estado["mao_atual"]["rodadas"][0]["vencedor_assento"] == 2  # o 3O do assento 2 venceu
+    assert estado["mao_atual"]["vez_assento"] == 2
+
+
+def test_no_2x2_o_vencedor_da_rodada_e_o_assento_da_carta_mais_forte():
+    # Os dois do time A jogam cartas que vencem as do B. Com a vira K, a manilha é o ás: vence o
+    # ás do assento 0, não o 3 do parceiro, jogado depois.
+    estado = nova_partida("2x2", maos=[["AO", "5O", "6O"], ["4C", "5C", "6C"], ["3O", "7O", "QO"], ["4E", "5E", "6E"]], vira="KO")
+    estado = jogar_em_ordem(estado, "AO", "4C", "3O", "4E")
+    rodada = estado["mao_atual"]["rodadas"][0]
+    assert (rodada["vencedor_time"], rodada["vencedor_assento"]) == ("A", 0)
+
+    # Mesma força nos dois parceiros: vale a carta jogada primeiro, que também abre a próxima.
+    estado = nova_partida("2x2", maos=[["KO", "5O", "6O"], ["4C", "5C", "6C"], ["KC", "7O", "QO"], ["4E", "5E", "6E"]], vira=VIRA)
+    estado = jogar_em_ordem(estado, "KO", "4C", "KC", "4E")
+    assert estado["mao_atual"]["rodadas"][0]["vencedor_assento"] == 0
+    assert estado["mao_atual"]["vez_assento"] == 0
 
 
 # ---------- Jogadas recusadas ----------

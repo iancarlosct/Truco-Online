@@ -100,7 +100,6 @@ function derivar(estado) {
     // O chat continua valendo depois do fim da partida; só precisa da conexão.
     podeConversar: conectado,
     posicaoDe: (assento) => POSICOES[n][(assento - estado.meu_assento + n) % n],
-    timeDe: (assento) => estado.jogadores.find((j) => j.assento === assento)?.time,
     podeJogar: podeAgir && minhaVez && !truco && !maoAtual.aguardando_decisao_mao_de_onze,
     podePedirTruco:
       podeAgir &&
@@ -233,10 +232,10 @@ function criarRodadas(rodadas, ctx) {
 }
 
 // Centro da mesa: cartas da última rodada (a atual, ou a que acabou de terminar), vira com a
-// manilha e marcadores das rodadas. Na rodada decidida, as cartas do time vencedor ficam em
-// destaque enquanto ela continua na mesa: o estado diz só o time que venceu, não a carta.
+// manilha e marcadores das rodadas. Na rodada decidida, a carta vencedora (vencedor_assento, do
+// Game) fica em destaque enquanto a rodada continua na mesa; no empate, nenhuma.
 function criarCentro(maoAtual, ctx) {
-  const { posicaoDe, timeDe } = ctx;
+  const { posicaoDe } = ctx;
   const centro = el("div", "centro");
 
   const rodadaAtual = maoAtual.rodadas.at(-1);
@@ -244,8 +243,9 @@ function criarCentro(maoAtual, ctx) {
   for (const jogada of rodadaAtual?.jogadas ?? []) {
     const item = el("div", `jogada pos-${posicaoDe(jogada.assento)}`);
     item.dataset.assento = jogada.assento;
-    const vencedor = rodadaAtual.vencedor_time;
-    if (vencedor === timeDe(jogada.assento)) item.classList.add("vencedora", classeTime(vencedor));
+    if (jogada.assento === rodadaAtual.vencedor_assento) {
+      item.classList.add("vencedora", classeTime(rodadaAtual.vencedor_time));
+    }
     item.append(jogada.coberta || !jogada.carta ? criarVerso() : criarCarta(jogada.carta));
     jogadas.append(item);
   }
