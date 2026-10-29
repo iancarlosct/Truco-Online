@@ -1,17 +1,17 @@
 # Guia do backend: o que a tela de login espera do serviço Auth
 
-Este guia é para quem vai implementar o serviço Auth em Python com FastAPI e Postgres. Ele explica o que o serviço precisa receber e responder para a tela de login e cadastro (`frontend/index.html`) funcionar ligada a ele, no lugar das respostas falsas (mock) que ela usa hoje. Não é preciso conhecer FastAPI nem JWT: o guia explica o necessário e traz um exemplo pronto para rodar.
+Este guia é para quem vai implementar o serviço Auth em Python com FastAPI e Postgres. Ele explica o que o serviço precisa receber e responder para a tela de login e cadastro (`frontend/index.html`) funcionar ligada a ele. Não é preciso conhecer FastAPI nem JWT: o guia explica o necessário e traz um exemplo pronto para rodar.
 
 **De onde vêm as informações**
 
 - **Código da tela**: `frontend/index.html`, `frontend/js/api.js`, `frontend/js/auth.js` e `frontend/js/paginas/login.js`, na branch `feature/frontend-login` em 13/10/2026. Tudo o que o guia afirma que a tela envia, lê ou mostra saiu desse código e foi conferido rodando a tela no navegador: com o mock e, com ele desligado, falando com o exemplo da seção 8. Atualizado em 14/10/2026, depois do lobby (branch `feature/frontend-lobby`): `lobby.html` passou a existir, o tratamento de 401 entrou em `api.js` e cada serviço ganhou a sua chave de mock.
-- **Mock dentro de `api.js`**: enquanto o Auth não existe, é ele que responde ao cadastro e ao login. O comportamento dele é o contrato que a tela assume hoje.
+- **Mock dentro de `api.js`**: enquanto o Auth não existia, era ele que respondia ao cadastro e ao login, e o comportamento dele foi o contrato que a tela assumiu. Foi apagado no fechamento do projeto (P1).
 - **Documento de requisitos e contratos** (link no [README](../README.md)): usado para o que o código não cobre, como a rota `GET /api/auth/me` e o uso do token pelos outros serviços.
 - **Serviço Auth implementado** em `services/auth/`, na branch `feature/backend-infra-auth` em 28/10/2026, seguindo este guia rota por rota. Ele sobe com o Docker Compose, atrás do gateway (`gateway/nginx.conf`), com o banco próprio `auth-db`. Os pontos em que ele difere do guia estão logo abaixo, em "O que o serviço real faz diferente".
 
 Quando essas fontes não batem, ou quando o código depende de algo que não está escrito em lugar nenhum, o texto traz um código como **P3**. Ele aponta para o item correspondente da seção 10, Pontos em aberto.
 
-**Importante:** a tela já fala com o serviço. No topo de `frontend/js/api.js`, a constante `USAR_MOCK` está em `false`: o cadastro e o login vão ao Auth, pelo gateway. Com `true`, as mesmas funções voltam a ser simuladas dentro do navegador, sem nenhuma outra mudança no código da tela. O código do mock continua no arquivo, desligado (P1). O Lobby e o Ranking têm chaves próprias, `USAR_MOCK_LOBBY` e `USAR_MOCK_RANKING`, logo abaixo, também em `false` desde a fase 3: trocar o `USAR_MOCK` não mexe nelas ([guia do lobby](guia-backend-lobby.md)). Ao trocar o mock pelo serviço, limpe o `localStorage` do navegador (seção 9.3, passo 4).
+**Importante:** a tela fala só com o serviço: o cadastro e o login vão ao Auth, pelo gateway. O mock que respondia no lugar dele, e os do Lobby e do Ranking, foram apagados no fechamento do projeto (P1).
 
 **O que o serviço real faz diferente** do texto e dos exemplos deste guia:
 
@@ -25,7 +25,6 @@ Quando essas fontes não batem, ou quando o código depende de algo que não est
 | Página `/docs` e testes manuais | `http://localhost:8002/docs` e `curl` na porta 8002 | `http://localhost/api/auth/docs` e `curl` em `http://localhost`, pelo gateway: o serviço não tem porta aberta no computador | 9 |
 | Healthcheck | Não existia | `GET /saude`, fora do `/api/auth/`: o gateway não a repassa. O `docker-compose.yml` a usa para saber quando o Auth está pronto | — |
 | Parâmetros do SQL | `$1`, `$2` | `:nome`, `:email` (SQLAlchemy com `text()`) | 7.3 |
-| Mock do Auth | Apagado de `api.js` junto com o `USAR_MOCK = false` | Continua no arquivo, desligado | P1 |
 
 ## 1. Como a tela funciona
 
@@ -63,10 +62,9 @@ Tudo fica no `localStorage`, que continua valendo depois de fechar o navegador. 
 |---|---|---|
 | `truco.token` | O texto do campo `token`, exatamente como veio | Resposta do login |
 | `truco.usuario` | O objeto `usuario`, em JSON | Resposta do login |
-| `truco.mock.usuarios` | Usuários de mentira criados pelo mock | Só existe com `USAR_MOCK = true` |
 
 - **Para a tela, o token é só um texto.** Ela não abre o token, não confere a validade e não lê nada de dentro dele.
-- **"Estar logado" é ter algo em `truco.token`.** Quem abre `index.html` com um token guardado nem vê a tela: o navegador vai direto para `lobby.html`. Isso acontece mesmo que o token já tenha vencido: com o Lobby de verdade, a primeira chamada de lá volta com 401, e a tela apaga a sessão e volta para o login (seção 1.3; P13).
+- **"Estar logado" é ter algo em `truco.token`.** Quem abre `index.html` com um token guardado nem vê a tela: o navegador vai direto para `lobby.html`. Isso acontece mesmo que o token já tenha vencido: o lobby (e o histórico) conferem o token no Auth ao abrir, com `GET /api/auth/me`, e com 401 a tela apaga a sessão e volta para o login, com o aviso de sessão expirada (seção 1.3; P2 e P13).
 - **Sair é apagar as duas chaves.** A função `sair()`, de `auth.js`, não chama o servidor, e o contrato não tem rota de logout (P3).
 
 ### 1.3 Como o token é enviado depois
@@ -87,7 +85,7 @@ Um detalhe: `requisitar` manda o cabeçalho em **qualquer** chamada, inclusive c
 
 Na ordem recomendada. Cada etapa termina em algo que dá para ver funcionando.
 
-Situação em 28/10/2026: tudo entregue em `services/auth/`, menos a remoção do código do mock do Auth em `api.js` (P1).
+Situação no fechamento do projeto (29/10/2026): tudo entregue em `services/auth/`, e o mock do Auth apagado de `api.js` (P1).
 
 **Etapa 1: as duas rotas respondendo no formato certo**
 
@@ -111,7 +109,7 @@ Os usuários podem ficar na memória, como no exemplo 8.1. Já dá para criar co
 - [x] JWT assinado, com `sub`, `nome` e `exp` (seção 6.3).
 - [x] Segredo lido de variável de ambiente (seção 6.5).
 - [x] `GET /api/auth/me` validando o token (seções 3.5 e 8.2).
-- [x] Segredo, algoritmo e campos do token combinados com Lobby, Game e Ranking (P12). Esses serviços ainda não existem; quando existirem, conferem o token como na seção 6.6.
+- [x] Segredo, algoritmo e campos do token combinados com Lobby, Game e Ranking (P12). Os três conferem o token como na seção 6.6.
 
 **Etapa 4: Postgres, Docker e gateway**
 
@@ -119,8 +117,8 @@ Os usuários podem ficar na memória, como no exemplo 8.1. Já dá para criar co
 - [x] Erro de e-mail repetido vindo do banco convertido em 409 (seção 7.3).
 - [x] Serviço no Docker Compose, com o Uvicorn em `--host 0.0.0.0`.
 - [x] Rota `/api/auth` no Nginx (seção 3.1).
-- [x] `USAR_MOCK = false` na tela.
-- [ ] Mock do Auth apagado de `api.js` (P1).
+- [x] A tela falando com o Auth de verdade.
+- [x] Mock do Auth apagado de `api.js` (P1).
 
 ## 3. Rotas
 
@@ -257,7 +255,7 @@ Resposta de sucesso, com status **200**:
 | `usuario` | objeto | Sim, pelo contrato | Guardado inteiro em `truco.usuario`. A tela de login não lê os campos; o lobby usa o `id` e o `nome`. |
 | `usuario.id` | texto | Sim, pelo contrato | O mesmo valor que vai no `sub` do token (seção 6.3). |
 | `usuario.nome` | texto | Sim, pelo contrato | O nome cadastrado. |
-| `usuario.email` | texto | Sim, pelo contrato | O mock devolve em minúsculas, mesmo que o usuário tenha digitado com maiúsculas (P7). |
+| `usuario.email` | texto | Sim, pelo contrato | Em minúsculas, mesmo que o usuário tenha digitado com maiúsculas (P7). |
 
 O que o servidor faz:
 
@@ -268,7 +266,7 @@ O que o servidor faz:
 
 ### 3.5 `GET /api/auth/me`
 
-Está no documento de contratos, mas a tela ainda não chama essa rota (P2). Ela serve para conferir um token e é o modelo de como as outras rotas protegidas descobrem quem é o usuário.
+Está no documento de contratos. O lobby e o histórico a chamam ao abrir, para conferir a sessão antes de montar a página (P2). Ela serve para conferir um token e é o modelo de como as outras rotas protegidas descobrem quem é o usuário.
 
 A requisição não tem corpo. O token vem no cabeçalho:
 
@@ -307,12 +305,12 @@ Por isso a `mensagem` tem que ser escrita para o usuário final: em português, 
 
 ### 4.2 Códigos e status
 
-O documento de contratos define só o formato. Os códigos e os status abaixo são os que o mock da tela usa, mais os que este guia propõe para os casos que o mock não cobre (P5).
+O documento de contratos define só o formato. Os códigos e os status abaixo são os que o mock da tela usava, mais os que este guia propôs para os casos que o mock não cobria (P5).
 
 | Situação | Status | `erro` | `mensagem` | De onde vem |
 |---|---|---|---|---|
-| Cadastro com e-mail que já tem conta | 409 | `email_ja_cadastrado` | "Este e-mail já está cadastrado." | Mock de `api.js` |
-| Login com e-mail sem conta ou com senha errada | 401 | `credenciais_invalidas` | "E-mail ou senha incorretos." | Mock de `api.js` |
+| Cadastro com e-mail que já tem conta | 409 | `email_ja_cadastrado` | "Este e-mail já está cadastrado." | Mock que a tela usava |
+| Login com e-mail sem conta ou com senha errada | 401 | `credenciais_invalidas` | "E-mail ou senha incorretos." | Mock que a tela usava |
 | Dados inválidos no cadastro ou no login | 422 | `dados_invalidos` | Diz qual é o problema | Proposta deste guia (P6) |
 | Token ausente ou inválido em rota protegida | 401 | `token_invalido` | "Sessão inválida. Entre de novo." | Proposta deste guia |
 | Token vencido em rota protegida | 401 | `token_expirado` | "Sua sessão expirou. Entre de novo." | Proposta deste guia |
@@ -322,7 +320,7 @@ O documento de contratos define só o formato. Os códigos e os status abaixo s�
 
 A lista está fechada e é a que o serviço usa (P5). A tela continua não lendo o campo `erro`.
 
-No login, não diferencie "e-mail não existe" de "senha errada". O mock responde igual nos dois casos, para ninguém descobrir quais e-mails têm conta.
+No login, não diferencie "e-mail não existe" de "senha errada". O serviço responde igual nos dois casos, para ninguém descobrir quais e-mails têm conta.
 
 ### 4.3 O que a tela faz com cada resposta
 
@@ -523,7 +521,7 @@ CREATE TABLE usuarios (
 
 ### 7.2 E-mail sem diferenciar maiúsculas de minúsculas
 
-Para a tela, `Ana@Teste.com` e `ana@teste.com` são a mesma conta. É o que o mock faz, embora não esteja no contrato (P7). A tela envia o e-mail como o usuário digitou, então quem resolve isso é o servidor.
+Para a tela, `Ana@Teste.com` e `ana@teste.com` são a mesma conta. É o que o mock da tela fazia, embora não esteja no contrato (P7). A tela envia o e-mail como o usuário digitou, então quem resolve isso é o servidor.
 
 O jeito mais simples:
 
@@ -531,7 +529,7 @@ O jeito mais simples:
 2. Usar essa função no cadastro, antes de validar e de gravar, e no login, antes de buscar.
 3. Gravar no banco o e-mail já limpo. A restrição `UNIQUE` da tabela passa a impedir a conta duplicada.
 
-Com isso, `usuario.email` volta sempre em minúsculas, igual ao mock.
+Com isso, `usuario.email` volta sempre em minúsculas.
 
 O erro a evitar é limpar o e-mail em uma rota e esquecer na outra. Se o cadastro grava `Ana@Teste.com` e o login busca `ana@teste.com`, a conta é criada e o login automático falha. O usuário vê "Sua conta foi criada, mas não foi possível entrar agora…".
 
@@ -559,7 +557,7 @@ SELECT id, nome, email FROM usuarios WHERE id = $1;
 
 O serviço real, em `services/auth/`, segue a mesma estrutura deste exemplo, dividida em arquivos: `rotas.py` (as três rotas e as regras), `seguranca.py` (argon2 e JWT), `banco.py` (Postgres), `erros.py` (formato dos erros), `config.py` (variáveis de ambiente) e `main.py` (o app, que junta tudo). O exemplo continua aqui por ser o jeito mais curto de entender cada parte.
 
-Os dois trechos abaixo foram testados com Python 3.14, FastAPI 0.143, Uvicorn 0.54, PyJWT 2.15 e argon2-cffi 25.1. A tela real, com `USAR_MOCK = false`, criou conta e entrou usando este exemplo.
+Os dois trechos abaixo foram testados com Python 3.14, FastAPI 0.143, Uvicorn 0.54, PyJWT 2.15 e argon2-cffi 25.1. A tela real, falando com ele no lugar do mock da época, criou conta e entrou usando este exemplo.
 
 Para rodar, salve o código como `main.py` numa pasta de testes, fora do repositório, e execute dentro dela:
 
@@ -865,12 +863,11 @@ O FastAPI monta sozinho uma página de testes, que funciona em qualquer sistema.
 
 ### 9.3 Com a tela de verdade
 
-A tela e a API precisam estar no mesmo endereço, porque a tela chama `/api/auth/...` no endereço de onde ela mesma foi carregada. Com o gateway, basta subir tudo com o Docker Compose e abrir `http://localhost`: o `USAR_MOCK` já está em `false`. Siga então os passos 4 a 7 abaixo, trocando `http://localhost:8002/` por `http://localhost/`.
+A tela e a API precisam estar no mesmo endereço, porque a tela chama `/api/auth/...` no endereço de onde ela mesma foi carregada. Com o gateway, basta subir tudo com o Docker Compose e abrir `http://localhost`. Siga então os passos 3 a 6 abaixo, trocando `http://localhost:8002/` por `http://localhost/`.
 
 Para testar o exemplo da seção 8 sem o Docker, o próprio serviço de teste pode entregar os arquivos da tela:
 
-1. Em `frontend/js/api.js`, confira que a linha 13 está como `const USAR_MOCK = false;`. É a única chave que importa aqui; as do Lobby e do Ranking, nas linhas 21 e 22, estão em `false` desde a fase 3.
-2. Acrescente este trecho no **fim** do `main.py` de teste, depois de `app.include_router(rotas)`, trocando o caminho pelo da pasta `frontend` do repositório:
+1. Acrescente este trecho no **fim** do `main.py` de teste, depois de `app.include_router(rotas)`, trocando o caminho pelo da pasta `frontend` do repositório:
 
 ```python
 # SÓ PARA TESTE LOCAL, enquanto não há Nginx: o próprio serviço entrega os arquivos da tela,
@@ -880,11 +877,11 @@ from fastapi.staticfiles import StaticFiles
 app.mount("/", StaticFiles(directory="caminho/para/frontend", html=True))
 ```
 
-3. Abra `http://localhost:8002/` e recarregue com Ctrl+Shift+R, para o navegador não usar uma cópia antiga do `api.js`.
-4. Limpe o que o mock ou um teste anterior deixou guardado: aperte F12, vá ao Console e rode `localStorage.clear()`. Se sobrar um token antigo, a tela pula direto para `lobby.html`; nesse caso rode o comando ali mesmo e abra o endereço de novo.
-5. Crie uma conta. O navegador vai para o lobby, que continua com as salas e o ranking falsos, porque as chaves dele seguem em `true`.
-6. Confira o que ficou guardado: F12, aba Application (ou Armazenamento), Local Storage. `truco.token` tem que ser um JWT, com três partes separadas por ponto, e `truco.usuario` tem que ter `id`, `nome` e `email`.
-7. Para voltar à tela de login, rode `localStorage.clear()` no Console e abra `http://localhost:8002/` de novo. Teste então o e-mail repetido e a senha errada: a `mensagem` do servidor tem que aparecer na caixa do cartão.
+2. Abra `http://localhost:8002/` e recarregue com Ctrl+Shift+R, para o navegador não usar uma cópia antiga do `api.js`.
+3. Limpe o que um teste anterior deixou guardado: aperte F12, vá ao Console e rode `localStorage.clear()`. Se sobrar um token antigo, a tela pula direto para `lobby.html`; nesse caso rode o comando ali mesmo e abra o endereço de novo.
+4. Crie uma conta. O navegador vai para o lobby, que mostra um erro ao buscar as salas: o exemplo só tem o Auth, e aqui o que importa é o login.
+5. Confira o que ficou guardado: F12, aba Application (ou Armazenamento), Local Storage. `truco.token` tem que ser um JWT, com três partes separadas por ponto, e `truco.usuario` tem que ter `id`, `nome` e `email`.
+6. Para voltar à tela de login, rode `localStorage.clear()` no Console e abra `http://localhost:8002/` de novo. Teste então o e-mail repetido e a senha errada: a `mensagem` do servidor tem que aparecer na caixa do cartão.
 
 Abrir a tela por `python -m http.server`, como no desenvolvimento do frontend, não serve para este teste. Esse servidor não tem a API e responde 501 a qualquer envio.
 
@@ -898,7 +895,7 @@ Abrir a tela por `python -m http.server`, como no desenvolvimento do frontend, n
 | A tela mostra "Não foi possível conectar ao servidor…" | O serviço está parado ou levou mais de 10 segundos para responder. |
 | A tela mostra "Algo deu errado. Tente de novo." | O login respondeu sucesso sem o campo `token`, por exemplo com `access_token`. O console do navegador mostra "Resposta do login sem token." |
 | O cadastro funciona, mas a tela cai na aba Entrar com "Sua conta foi criada, mas não foi possível entrar agora…" | O login feito logo depois do cadastro falhou. Causas comuns: e-mail gravado de um jeito e buscado de outro (seção 7.2), senha alterada antes do hash, ou gravação ainda não confirmada no banco (seção 7.3). |
-| A tela abre e pula direto para `lobby.html` | Sobrou um token no `localStorage`, do mock ou de um teste anterior. Rode `localStorage.clear()` no Console. |
+| A tela abre e pula direto para `lobby.html` | Sobrou um token no `localStorage`, de um teste anterior. Rode `localStorage.clear()` no Console. |
 | O `curl` recebe `dados_invalidos` com um JSON que parece certo | O comando foi rodado no PowerShell, que perde as aspas do JSON (seção 9.1). |
 | No `/docs`, o `GET /api/auth/me` devolve 401 mesmo com token | Faltou clicar em **Authorize**, ou a palavra `Bearer` foi colada junto com o token. |
 | `TypeError: Object of type UUID is not JSON serializable` ao fazer login | O `sub` recebeu o id como objeto UUID. Use `str(id)` (seção 6.3). |
@@ -909,20 +906,20 @@ Abrir a tela por `python -m http.server`, como no desenvolvimento do frontend, n
 
 ### Diferenças entre a tela e o documento de contratos
 
-- **P1. A tela ainda usa o mock. Em parte resolvido.** `USAR_MOCK` está em `false` em `frontend/js/api.js`, e o cadastro e o login vão ao Auth pelo gateway. Falta apagar o código do mock do Auth do arquivo, o que fica para o fechamento do projeto. O Lobby e o Ranking têm chaves e mocks próprios: as chaves estão em `false` desde a fase 3, e o código dos mocks sai junto com o do Auth.
-- **P2. `GET /api/auth/me` não é usado.** A rota está no contrato, mas nenhuma tela a chama. Decidir se o frontend passa a usá-la, por exemplo para conferir o token ao abrir o lobby, ou se ela fica só para testes.
-- **P3. Logout sem rota.** O requisito RF02 pede login e logout, mas o contrato não tem rota de logout. Hoje sair é apagar o token do navegador, e o token continua valendo até vencer. Decidir se isso basta.
+- **P1. A tela ainda usa o mock. Resolvido.** O cadastro e o login vão ao Auth pelo gateway, e o código dos mocks (Auth, Lobby e Ranking, em `frontend/js/api.js`, e o do Game, em `frontend/js/mock/`) foi apagado no fechamento do projeto.
+- **P2. `GET /api/auth/me` não é usado.** A rota está no contrato, mas nenhuma tela a chama. Decidir se o frontend passa a usá-la, por exemplo para conferir o token ao abrir o lobby, ou se ela fica só para testes. **Resolvido:** o lobby e o histórico chamam a rota ao abrir (`conferirSessao`, em `frontend/js/api.js`): um token vencido ou de um usuário que não existe mais leva direto para o login, com "Sua sessão expirou. Entre novamente.", em vez de a página abrir e falhar na primeira chamada.
+- **P3. Logout sem rota.** O requisito RF02 pede login e logout, mas o contrato não tem rota de logout. Hoje sair é apagar o token do navegador, e o token continua valendo até vencer. Decidir se isso basta. **Mantido assim:** sair só apaga a sessão do navegador, e o token vale até vencer (24 horas). Ficou como limitação conhecida, no [README](../README.md#limitações-conhecidas).
 - **P4. Resposta do cadastro.** O contrato pede `id` e `nome`, mas não diz o status. A tela não lê o corpo e aceita qualquer status de sucesso. Este guia usa 201. **Resolvido:** o serviço responde 201.
 
 ### O que o código da tela assume sem estar escrito
 
-- **P5. Códigos e status de erro.** O contrato define só o formato `{"erro", "mensagem"}`. `email_ja_cadastrado` (409) e `credenciais_invalidas` (401) foram escolhidos no mock da tela. `token_invalido` e `token_expirado` (401) são proposta deste guia. A tela de login não depende dos códigos, e o lobby também não: ele só olha o status ([guia do lobby](guia-backend-lobby.md), seção 5.3). **Resolvido:** a lista fechada, com os códigos do 404, do 405 e do 500, está na seção 4.2.
-- **P6. Dados inválidos.** Nem a tela nem o mock têm código ou status para dados inválidos, porque a tela valida antes de enviar. A proposta é 422 `dados_invalidos`, já que 422 é o status que o FastAPI usa nesse caso. Confirmar, e decidir se a `mensagem` é única ou uma por regra. **Resolvido:** 422 `dados_invalidos`, com uma `mensagem` por regra, a mesma que a tela mostra, e uma geral para corpo fora do formato (seção 5).
-- **P7. E-mail sem diferenciar maiúsculas de minúsculas.** O mock trata `Ana@Teste.com` e `ana@teste.com` como a mesma conta e devolve o e-mail em minúsculas. Isso não está no contrato. **Resolvido:** o serviço faz o mesmo (seção 7.2).
+- **P5. Códigos e status de erro.** O contrato define só o formato `{"erro", "mensagem"}`. `email_ja_cadastrado` (409) e `credenciais_invalidas` (401) foram escolhidos no mock que a tela usava. `token_invalido` e `token_expirado` (401) são proposta deste guia. A tela de login não depende dos códigos, e o lobby também não: ele só olha o status ([guia do lobby](guia-backend-lobby.md), seção 5.3). **Resolvido:** a lista fechada, com os códigos do 404, do 405 e do 500, está na seção 4.2.
+- **P6. Dados inválidos.** Nem a tela nem o mock tinham código ou status para dados inválidos, porque a tela valida antes de enviar. A proposta é 422 `dados_invalidos`, já que 422 é o status que o FastAPI usa nesse caso. Confirmar, e decidir se a `mensagem` é única ou uma por regra. **Resolvido:** 422 `dados_invalidos`, com uma `mensagem` por regra, a mesma que a tela mostra, e uma geral para corpo fora do formato (seção 5).
+- **P7. E-mail sem diferenciar maiúsculas de minúsculas.** O mock tratava `Ana@Teste.com` e `ana@teste.com` como a mesma conta e devolvia o e-mail em minúsculas. Isso não está no contrato. **Resolvido:** o serviço faz o mesmo (seção 7.2).
 - **P8. Conta ativa na hora.** A tela faz o login automaticamente logo depois do cadastro. Isso exclui confirmação de e-mail ou qualquer etapa entre criar a conta e poder entrar. Confirmar que é o comportamento desejado. **Resolvido:** a conta vale na hora, e o cadastro só responde depois do commit.
-- **P9. Regras e limites de validação.** Nome com até 20 caracteres, senha com no mínimo 6 e o formato do e-mail estão só no código da tela, não no documento de contratos. A tela não limita o tamanho máximo do e-mail nem da senha, não restringe os caracteres do nome e não exige nome único. O P14 do guia da mesa mostra que nomes repetidos se confundem no chat. Decidir os limites do servidor e avisar o frontend, para a tela validar igual. **Em parte resolvido:** o servidor aplica as mesmas regras da tela (seção 5), sem limite máximo para e-mail e senha. Continua em aberto se o nome deve ser único.
-- **P10. Tempo de resposta.** A tela desiste de qualquer requisição depois de 10 segundos. Se um cadastro demorar mais que isso, a conta pode ser criada e a tela mostrar falha de conexão; na nova tentativa, o usuário recebe "e-mail já cadastrado". O valor não foi combinado com ninguém.
-- **P11. Tipo do `id`.** O exemplo de estado do documento de contratos mostra `"usuario_id": "uuid"`. O mock devolve textos como `"mock-1"`, e a tela não interpreta o valor. Este guia assume UUID em formato de texto. **Resolvido:** o `id` é um UUID gerado pelo Postgres e vai como texto nas respostas e no `sub` do token.
+- **P9. Regras e limites de validação.** Nome com até 20 caracteres, senha com no mínimo 6 e o formato do e-mail estão só no código da tela, não no documento de contratos. A tela não limita o tamanho máximo do e-mail nem da senha, não restringe os caracteres do nome e não exige nome único. O P14 do guia da mesa mostra que nomes repetidos se confundem no chat. Decidir os limites do servidor e avisar o frontend, para a tela validar igual. **Resolvido:** o servidor aplica as mesmas regras da tela (seção 5), sem limite máximo para e-mail e senha. O nome não precisa ser único e não pode ser trocado depois do cadastro; nomes repetidos na mesma mesa ficaram como limitação conhecida, no [README](../README.md#limitações-conhecidas).
+- **P10. Tempo de resposta.** A tela desiste de qualquer requisição depois de 10 segundos. Se um cadastro demorar mais que isso, a conta pode ser criada e a tela mostrar falha de conexão; na nova tentativa, o usuário recebe "e-mail já cadastrado". O valor não foi combinado com ninguém. **Mantido assim:** o cadastro do Auth leva bem menos que isso (o argon2 é a parte mais lenta), e o caso ficou como limitação conhecida, no [README](../README.md#limitações-conhecidas).
+- **P11. Tipo do `id`.** O exemplo de estado do documento de contratos mostra `"usuario_id": "uuid"`. O mock devolvia textos como `"mock-1"`, e a tela não interpreta o valor. Este guia assume UUID em formato de texto. **Resolvido:** o `id` é um UUID gerado pelo Postgres e vai como texto nas respostas e no `sub` do token.
 
 ### Token
 

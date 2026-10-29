@@ -1,24 +1,25 @@
 # Guia do backend: o que a tela da mesa espera do serviço Game
 
-Este guia é para quem vai implementar o serviço Game em Python com FastAPI. Ele explica o que o servidor precisa enviar e receber para a tela da mesa (`frontend/mesa.html`) funcionar conectada a ele, no lugar dos estados falsos (mocks) que ela usa hoje. Não é preciso conhecer FastAPI nem WebSocket: o guia explica o necessário e traz um exemplo pronto para rodar.
+Este guia é para quem vai implementar o serviço Game em Python com FastAPI. Ele explica o que o servidor precisa enviar e receber para a tela da mesa (`frontend/mesa.html`) funcionar conectada a ele. Não é preciso conhecer FastAPI nem WebSocket: o guia explica o necessário e traz um exemplo pronto para rodar.
 
 **De onde vêm as informações**
 
-- **Código da tela**: `frontend/mesa.html`, `frontend/js/paginas/mesa.js`, `frontend/js/cartas.js` e `frontend/js/mock/estados.js`, na branch `feature/frontend-mesa` em 10/10/2026. Tudo o que o guia afirma que a tela lê, mostra ou envia saiu desse código e foi conferido rodando a tela no navegador com variações do estado. Atualizado em 20/10/2026 (branch `feature/frontend-partida`): a mesa passou a se conectar sozinha, pelo `frontend/js/ws.js`, e ganhou a espera, a reconexão, a tela de fim de partida e a saída.
+- **Código da tela**: `frontend/mesa.html`, `frontend/js/paginas/mesa.js`, `frontend/js/cartas.js` e os estados falsos de `frontend/js/mock/estados.js` (apagados no fechamento do projeto), na branch `feature/frontend-mesa` em 10/10/2026. Tudo o que o guia afirma que a tela lê, mostra ou envia saiu desse código e foi conferido rodando a tela no navegador com variações do estado. Atualizado em 20/10/2026 (branch `feature/frontend-partida`): a mesa passou a se conectar sozinha, pelo `frontend/js/ws.js`, e ganhou a espera, a reconexão, a tela de fim de partida e a saída.
 - **Decisões de protocolo de 20/10/2026**: só as mensagens `estado` e `erro` do servidor, o campo `status`, os códigos de erro e de fechamento, a mão do parceiro na mão de onze, a primeira resposta do time no 2x2, a criação da rodada e a pausa entre as mãos. Elas aparecem como regras no texto e ainda não estão no documento de contratos. Os pontos em aberto que elas fecham estão marcados como resolvidos na seção 9.
 - **Documento de requisitos e contratos** (link no [README](../README.md)): usado para o que o código ainda não cobre, como o endereço do WebSocket.
 - **Serviço Game de verdade** (`services/game/`, branch `feature/backend-game`, 28/10/2026): o motor de regras e a camada de serviço seguem este guia. O que a implementação decidiu está na seção 10, e os pontos em aberto que ela fechou (P12, P13, P17, P19, P20, P21 e P22) estão marcados como resolvidos na seção 9. Tudo foi conferido com os testes do serviço e com uma partida 1x1 completa na tela real, entre dois usuários do Auth, passando pelo gateway.
 - **Serviço de Bots** (`services/bots/`, branch `feature/backend-bots`, 28/10/2026): o bot é um cliente do Game como a tela, e a seção 10.7 registra como ele usa este protocolo. Conferido com os testes do serviço, com partidas 1x1 e 2x2 criadas pelo Lobby e com uma partida 1x1 na tela real, de um usuário do Auth contra um bot.
+- **Fechamento do projeto** (branch `feature/fechamento`, 29/10/2026): os estados falsos e o servidor simulado da tela foram apagados, a mesa ganhou as animações (seções 1 e 6.4), o Game passou a mandar o assento da carta vencedora de cada rodada (`vencedor_assento`, seção 4.1) e o token deixou de aparecer nos logs (seção 3.2).
 
 Quando os dois não batem, ou quando o código depende de algo que não está escrito em lugar nenhum, o texto traz um código como **P3**. Ele aponta para o item correspondente da seção 9, Pontos em aberto.
 
-**Importante:** a tela fala com o Game de verdade. No topo de `frontend/js/ws.js`, a constante `USAR_MOCK_GAME` está em `false` desde a fase 3, junto com o Lobby de verdade, que é quem cria as partidas no Game: a conexão vai para `/ws/partidas/...` no mesmo endereço da página. Com `true`, a mesa volta a conversar com o servidor simulado, que roda dentro do navegador (`frontend/js/mock/servidor-game.js`) e continua no repositório até o fechamento do projeto. O servidor simulado não é o motor de regras: ele existe só para testar a tela. O script `services/game/scripts/partida_de_teste.py` ainda cria uma partida sem passar pelo Lobby, para testes do Game ([README](../README.md)).
+**Importante:** a tela fala só com o Game de verdade. A mesa abre como `mesa.html?partida={partida_id}` (o lobby manda para lá quando a partida começa) e conecta em `/ws/partidas/...`, no mesmo endereço da página. Os estados falsos e o servidor simulado que ela usava antes de o Game existir foram apagados no fechamento do projeto; sem `?partida=`, a mesa volta para o lobby. O script `services/game/scripts/partida_de_teste.py` ainda cria uma partida sem passar pelo Lobby, para testes do Game ([README](../README.md)).
 
 ## 1. Como a tela funciona
 
 A tela não tem nenhuma regra de truco. Ela faz só duas coisas:
 
-1. **Desenha o que recebe.** A função `renderizarMesa(estado)` apaga a tela e redesenha tudo a partir de um objeto de estado. Ela não guarda nada do estado anterior.
+1. **Desenha o que recebe.** A função `renderizarMesa(estado)` apaga a tela e redesenha tudo a partir de um objeto de estado. A tela guarda o estado anterior só para as animações (`frontend/js/animacoes.js`): compara o anterior com o novo para saber o que mudou (uma carta jogada, uma mão nova, um pedido de truco, uma rodada decidida, pontos no placar) e anima a mesa já redesenhada com o estado novo. Nada do estado anterior decide o que aparece: com ou sem animação, a mesa mostra o último `estado` recebido.
 2. **Envia intenções do jogador.** Cada clique vira uma mensagem pequena ("quero jogar o 7 de ouros", "peço truco"). Todas saem por uma única função, `enviar(mensagem)`.
 
 Quem decide se a jogada vale, de quem é a vez, quem ganhou a rodada e quanto vale a mão é o servidor.
@@ -113,7 +114,7 @@ Como chegam os dois dados:
 
 Com o token, o Game descobre quem é o usuário sem consultar o Auth. Com a lista de assentos recebida na criação da partida (`usuario_id`, `nome`, `bot`), descobre em que assento ele está. Esse assento é o `meu_assento` da mensagem `estado` (P17, resolvido: o `sub` do token é comparado com o `usuario_id` de cada assento; os bots usam um token próprio, seção 10.5).
 
-Um detalhe para saber: o token aparece inteiro nos logs de acesso do Uvicorn e do Nginx, porque faz parte da URL.
+O token faz parte da URL, mas não fica nos logs: o gateway grava o acesso ao `/ws/` sem a query string (formato `sem_query`, em `gateway/nginx.conf`), e o Game troca o valor por `***` na linha que o Uvicorn escreve a cada conexão (`SemTokenNoLog`, em `services/game/app/seguranca.py`). A exceção é o log de erros do Nginx, que não tem formato configurável: quando o Game está fora do ar, a linha do erro traz o pedido inteiro.
 
 ### 3.3 O que o servidor faz ao receber uma conexão
 
@@ -159,6 +160,7 @@ map $http_upgrade $connection_upgrade {
 }
 
 location /ws/ {
+    access_log /var/log/nginx/access.log sem_query;   # o log de acesso sem o ?token=
     proxy_pass http://game;   # sem barra no fim: o caminho chega inteiro ao Game
     proxy_http_version 1.1;
     proxy_set_header Upgrade $http_upgrade;
@@ -400,7 +402,7 @@ A mesma situação enviada ao João (assento 3) muda só em `meu_assento` e em q
 
 Todas são objetos JSON com o campo `tipo`. Nenhuma leva o nome nem o assento do jogador: o servidor sabe quem enviou pela conexão.
 
-A função `enviar` manda cada mensagem pela conexão, como um texto JSON. Com a conexão caída, os controles ficam desabilitados e nada é enviado. Só nos estados falsos da tela (`mesa.html` sem `?partida=`), que não têm conexão, ela escreve a mensagem no console do navegador, no formato `[enviar] {...}`.
+A função `enviar` manda cada mensagem pela conexão, como um texto JSON. Com a conexão caída, os controles ficam desabilitados e nada é enviado.
 
 | `tipo` | Campos | A tela envia quando |
 |---|---|---|
@@ -513,7 +515,7 @@ O que o servidor faz:
 {"tipo": "erro", "codigo": "fora_da_vez", "mensagem": "Não é a sua vez."}
 ```
 
-- Usar um destes códigos. A divisão entre eles é a do servidor simulado da tela (`frontend/js/mock/servidor-game.js`):
+- Usar um destes códigos. A divisão entre eles é a do motor do Game (`services/game/engine/partida.py`):
 
 | `codigo` | Quando | Exemplo de `mensagem` |
 |---|---|---|
@@ -535,7 +537,7 @@ A tela mostra a `mensagem` por 4 segundos na barra de ações, no lugar da frase
 
 ### 6.4 Fim de rodada, de mão e de partida
 
-A tela não tem animação nem pausa própria. Ela mostra o último `estado` recebido e, no centro, só a última rodada da lista. Por isso a ordem e o ritmo dos estados ficam com o servidor:
+A tela anima a passagem de um estado para o outro (a carta indo para a mesa, a distribuição, o pedido de truco, a carta vencedora da rodada, o placar e a comemoração no fim), mas não segura nenhum estado nem tem pausa própria: cada animação começa com o estado novo já desenhado e dura menos de 1 segundo, fora os confetes da vitória. Com o `prefers-reduced-motion` ligado no sistema, nada se move. Ela mostra o último `estado` recebido e, no centro, só a última rodada da lista. Por isso a ordem e o ritmo dos estados ficam com o servidor:
 
 1. **Fim de rodada.** O estado sai com a rodada completa, `vencedor_time` e `vencedor_assento` preenchidos e `vez_assento` em quem abre a próxima. A rodada nova **não** entra em `rodadas` agora: ela só é criada quando a primeira carta dela for jogada (seção 5.1). Assim a rodada encerrada continua na mesa até alguém abrir a seguinte, sem pausa nenhuma.
 2. **Fim de mão.** O estado sai com a última rodada completa, o `placar` atualizado e `"vez_assento": null` (a tela mostra "Fim da mão."). O servidor espera uns 2 segundos e só então envia a mão nova: `numero`, `pe`, `vira`, cartas, `valor` inicial e `"rodadas": []`. Use `await asyncio.sleep(2)`. Nunca use `time.sleep`, que trava o servidor inteiro, para todas as partidas. Durante a pausa o chat continua funcionando, e as outras ações recebem `erro`.
@@ -589,8 +591,8 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 
 app = FastAPI()
 
-# Estado fixo, igual ao mock "inicio1x1" da tela (frontend/js/mock/estados.js),
-# mais o campo "tipo" que o contrato pede em toda mensagem.
+# Estado fixo de exemplo: uma partida 1x1 no começo da primeira mão,
+# com o campo "tipo" que o contrato pede em toda mensagem.
 # Em Python, true/false/null do JSON se escrevem True/False/None.
 ESTADO_FIXO = {
     "tipo": "estado",
@@ -838,34 +840,11 @@ from fastapi.staticfiles import StaticFiles
 app.mount("/", StaticFiles(directory="caminho/para/o/repositorio/frontend", html=True), name="tela")
 ```
 
-2. Em `frontend/js/ws.js`, confira que `USAR_MOCK_GAME` está em `false` (o padrão desde a fase 3).
-3. Suba o servidor (`uvicorn main:app --reload --port 8001`), abra `http://localhost:8001/index.html` e entre. O login pode continuar no mock: os exemplos da seção 7 não conferem o token.
-4. Abra `http://localhost:8001/mesa.html?partida=p1`. A mesa desenha o `estado` do servidor, e os cliques saem pela conexão. Com o exemplo 7.2, o chat vai e volta; as outras mensagens só aparecem no terminal do servidor. O assento, nesse exemplo, vem de `?assento=` na URL do WebSocket, que a tela não manda: pela tela você é sempre o assento 0.
-5. Para ver a reconexão, pare o servidor e suba de novo: a mesa mostra "Conexão perdida. Reconectando…" e volta sozinha. Com `?partida=` de uma partida que não existe, o exemplo 7.2 fecha com 4404, e a tela mostra "Esta partida não existe." e volta para o lobby.
+2. Suba o servidor (`uvicorn main:app --reload --port 8001`) e abra `http://localhost:8001/index.html`. A mesa exige uma sessão, mas os exemplos da seção 7 não conferem o token: sem o Auth, crie uma sessão de teste no Console (F12) dessa página: `localStorage.setItem("truco.token", "teste"); localStorage.setItem("truco.usuario", JSON.stringify({ id: "u1", nome: "Ian", email: "ian@teste.dev" }))`.
+3. Abra `http://localhost:8001/mesa.html?partida=p1`. A mesa desenha o `estado` do servidor, e os cliques saem pela conexão. Com o exemplo 7.2, o chat vai e volta; as outras mensagens só aparecem no terminal do servidor. O assento, nesse exemplo, vem de `?assento=` na URL do WebSocket, que a tela não manda: pela tela você é sempre o assento 0.
+4. Para ver a reconexão, pare o servidor e suba de novo: a mesa mostra "Conexão perdida. Reconectando…" e volta sozinha. Com `?partida=` de uma partida que não existe, o exemplo 7.2 fecha com 4404, e a tela mostra "Esta partida não existe." e volta para o lobby.
 
-**Sem mexer em nenhum arquivo.** A mesa aberta sem `?partida=` não conecta (mostra os estados falsos), e dá para usá-la como visualizador pelo console:
-
-1. Sirva o frontend: dentro de `frontend/`, rode `python -m http.server 8000`.
-2. Abra `http://localhost:8000/mesa.html`.
-3. No Console (F12), cole:
-
-```js
-const mesa = await import("/js/paginas/mesa.js");
-const ws = new WebSocket("ws://localhost:8001/ws/partidas/p1?token=teste");
-ws.onmessage = (e) => {
-  const msg = JSON.parse(e.data);
-  console.log("recebido:", msg);
-  if (msg.tipo === "estado") mesa.renderizarMesa(msg);
-};
-```
-
-A tela passa a desenhar o que o seu servidor mandar. Algumas observações:
-
-- Os cliques só escrevem `[enviar] {...}` no console, porque a página aberta assim não tem conexão. Para mandar a mesma mensagem ao servidor, use `ws.send(JSON.stringify({...}))`.
-- Se a tela não mudar depois de um `estado`, olhe o console: um erro em vermelho indica campo obrigatório faltando (seção 4.1).
-- Não use o seletor de mock no canto da mesa durante o teste. Ele redesenha a tela com um estado falso.
-- Se o servidor reiniciar, a conexão cai. Recarregue a página e cole o trecho de novo.
-- Com o exemplo 7.2, abra duas abas, uma com `?assento=0` e outra com `?assento=1` na URL do WebSocket. Cada aba mostra a mão do seu assento, e o chat enviado por uma aparece nas duas.
+Se a tela não mudar depois de um `estado`, olhe o console: um erro em vermelho indica campo obrigatório faltando (seção 4.1).
 
 ### 8.4 Problemas comuns
 
@@ -887,7 +866,7 @@ A tela passa a desenhar o que o seu servidor mandar. Algumas observações:
 
 ### Diferenças entre a tela e o documento de contratos
 
-- **P1. A tela ainda não se conecta. Resolvido.** A mesa abre como `mesa.html?partida={partida_id}` e conecta pelo `frontend/js/ws.js`, com o token do login. Ela chama `renderizarMesa` a cada `estado` e envia as mensagens como JSON. Hoje a conexão vai para o servidor simulado; com `USAR_MOCK_GAME = false`, para o Game (seção 8.3).
+- **P1. A tela ainda não se conecta. Resolvido.** A mesa abre como `mesa.html?partida={partida_id}` e conecta pelo `frontend/js/ws.js`, com o token do login. Ela chama `renderizarMesa` a cada `estado` e envia as mensagens como JSON, sempre para o Game (seção 8.3).
 - **P2. Campo `tipo` na mensagem `estado`. Resolvido.** Os campos do estado vão no primeiro nível, junto com `"tipo": "estado"`.
 - **P3. `meu_assento`. Resolvido.** Faz parte do protocolo: o `estado` enviado a cada jogador traz `meu_assento`, acrescentado na visão dele. Não existe no estado guardado no servidor (seção 4.1).
 - **P4. `aguardando_decisao_mao_de_onze`. Resolvido.** Faz parte do protocolo: `mao_atual` traz o campo, `true` enquanto o time com 11 não decide. A tela o usa para mostrar os botões "Jogar a mão" e "Correr" e para bloquear as cartas (seção 4.1).
@@ -902,8 +881,8 @@ A tela passa a desenhar o que o seu servidor mandar. Algumas observações:
 - **P10. Rodadas e pausas. Resolvido.** A rodada nova só é criada com a primeira carta dela, então a rodada encerrada continua na mesa sem pausa nenhuma, e a tela calcula a rodada da próxima carta sozinha. No fim de cada mão o servidor espera uns 2 segundos antes de mandar a próxima (seção 6.4).
 - **P11. Quem responde pelo time no 2x2. Resolvido.** Qualquer jogador do time pode responder ao truco ou decidir a mão de onze, e vale a primeira resposta. A segunda recebe `erro` (seções 5.3 e 5.4).
 - **P12. `valor` e `ultimo_aumento_time`. Resolvido.** Adotada a sugestão: `valor` é quanto a mão vale agora, isto é, o que o adversário ganha se alguém correr. Ele não muda no pedido, só no aceite e no aumento; `ultimo_aumento_time` recebe o time cujo pedido foi aceito (seção 5.3). Durante a decisão da mão de onze, `valor` é 1 (o que o adversário ganha se o time com 11 correr) e passa a 3 quando o time decide jogar (seção 5.4).
-- **P13. Mão de ferro. Resolvido.** Decisão do grupo: com 11 a 11, o servidor só marca `"tipo": "mao_de_ferro"` e bloqueia o truco, sem decisão de mão de onze e sem cartas às cegas. As cartas vão em `mao` como numa mão comum, e a mão vale 1: quem vencer chega a 12 e ganha a partida. É o mesmo comportamento do servidor simulado da tela.
-- **P14. Limites de nome e de chat. Em parte resolvido.** O chat ficou em 50 mensagens no histórico e 200 caracteres por mensagem, conferidos também no servidor (seção 5.5). Continua em aberto o nome: a cor do autor no chat é escolhida comparando `de` com o `nome` dos jogadores, então nomes repetidos se confundem, e a tela não corta nomes longos. Decidir o tamanho máximo do nome.
+- **P13. Mão de ferro. Resolvido.** Decisão do grupo: com 11 a 11, o servidor só marca `"tipo": "mao_de_ferro"` e bloqueia o truco, sem decisão de mão de onze e sem cartas às cegas. As cartas vão em `mao` como numa mão comum, e a mão vale 1: quem vencer chega a 12 e ganha a partida. A mão de ferro sem cartas às cegas está entre as limitações conhecidas, no [README](../README.md).
+- **P14. Limites de nome e de chat. Resolvido.** O chat ficou em 50 mensagens no histórico e 200 caracteres por mensagem, conferidos também no servidor (seção 5.5). O nome tem de 1 a 20 caracteres, conferidos no cadastro (Auth) e na criação da partida (Game), e a tela corta com reticências o que não cabe, com o nome inteiro no `title`. O cadastro não exige nome único, e o nome não pode ser trocado depois. Como a cor do autor no chat é escolhida comparando `de` com o `nome` dos jogadores, dois jogadores com o mesmo nome na mesma mesa se confundem: isso ficou como limitação conhecida, no [README](../README.md).
 
 ### Mensagens do contrato
 
@@ -915,7 +894,7 @@ A tela passa a desenhar o que o seu servidor mandar. Algumas observações:
 - **P17. Token e assento. Resolvido.** O token é o JWT do Auth (HS256, com `sub`, `nome` e `exp`, assinado com `JWT_SEGREDO`), conferido pelo próprio Game. O `sub` é o id do usuário e é comparado com o `usuario_id` de cada assento. O bot usa um token assinado pelo próprio serviço de Bots, com o mesmo segredo e `sub` no formato `bot-<partida_id>-<assento>`, que diz a partida e o assento (seção 10.5).
 - **P18. Códigos de fechamento. Resolvido.** 4401 para token inválido, 4403 para usuário fora da partida e 4404 para partida inexistente, sempre com `accept()` antes do `close()` (seção 3.4).
 - **P19. Duas conexões do mesmo jogador. Resolvido.** A mais recente substitui a anterior, que é fechada com o código 4409. A tela trata o 4409 como recusa: mostra "Esta partida foi aberta em outra aba." e volta para o lobby, sem reconectar (seções 3.4 e 6.6). O código e o tratamento na tela foram acrescentados nesta fase.
-- **P20. Jogador que cai no meio da partida. Resolvido.** Decisão do grupo: a partida espera ele voltar, sem prazo, sem bot no lugar e sem derrota do time (seção 6.6). Continua não havendo indicador de jogador desconectado na tela. O botão "Sair da partida" só fecha a conexão: para o servidor, é igual a uma queda, e o jogador pode voltar pela mesma URL.
+- **P20. Jogador que cai no meio da partida. Resolvido.** Decisão do grupo: a partida espera ele voltar, sem prazo, sem bot no lugar e sem derrota do time (seção 6.6). A tela não mostra quem está desconectado: isso ficou como limitação conhecida, no [README](../README.md). O botão "Sair da partida" só fecha a conexão: para o servidor, é igual a uma queda, e o jogador pode voltar pela mesma URL.
 - **P21. Um processo ou vários. Resolvido.** O Game roda num processo só, num container só, com as conexões e as travas na memória. A limitação está documentada em `services/game/app/partidas.py` e no README. Para ter vários processos, seria preciso distribuir os avisos entre eles (pub/sub do Redis, por exemplo) e trocar a trava em memória por uma no Redis.
 - **P22. Caminho no Nginx. Resolvido.** O gateway repassa `/ws/partidas/...` ao Game sem alterar o caminho nem a query string (seção 3.5). A rota interna `/interno/...` não passa pelo gateway.
 
@@ -1038,11 +1017,12 @@ Quem assina esse token e joga pelos bots é o serviço de Bots, desde a fase 4 (
 
 - **Código de fechamento 4409**, novo, para a conexão substituída por outra do mesmo jogador, com o tratamento em `frontend/js/ws.js` (P19).
 - **`coberta` ausente** em `jogar_carta` vale `false` (seção 5.1). Mensagem binária no WebSocket recebe `erro` com `acao_invalida`, como um texto que não é JSON.
-- **Placar limitado a 12** e **três rodadas empatadas sem ponto** (seção 10.2). O documento de contratos não trata esses casos; o servidor simulado da tela faz o mesmo.
+- **Placar limitado a 12** e **três rodadas empatadas sem ponto** (seção 10.2). O documento de contratos não trata esses casos.
 - **`POST /interno/partidas` responde 201.** O guia do lobby pede só o corpo `{"partida_id"}`; o exemplo do Lobby aceita qualquer status 2xx.
 - **`partida.finalizada` traz `assento` e `bot`** em cada jogador de `times`, além do proposto.
 - **`vencedor_assento` em cada rodada**, acrescentado no fechamento do projeto: o assento da carta vencedora, calculado pelo motor (`engine/regras.py`), `null` no empate e com a rodada em andamento. A tela o usa para destacar só a carta vencedora no 2x2 (seção 4.1). Uma partida gravada antes do campo existir sai com `null` nas rodadas antigas.
 - **Partida parada por 7 dias é apagada** do `game-redis`; depois disso, quem tentar conectar recebe 4404.
+- **Token fora dos logs**, acrescentado no fechamento: o Game tira o valor do `?token=` das linhas de log do Uvicorn, e o gateway grava o `/ws/` sem a query string (seção 3.2).
 
 ### 10.7 O serviço de Bots
 
@@ -1094,7 +1074,7 @@ Quando chega o `estado` com `"status": "encerrada"`, o bot fecha a conexão (100
 - Partida abandonada: se a pessoa não volta, o bot fica conectado esperando, como a partida (P20). Depois de 7 dias parada o Game a apaga, e o bot desiste dela com o 4404 na próxima vez que conectar.
 - Pedidos de antes do serviço existir também são atendidos (o grupo é criado a partir do início do stream): numa partida da fase 3 que ainda espera alguém, os bots entram e esperam junto; numa que já terminou, entram e saem.
 
-**Testes** (`docker compose run --rm bots pytest`, com o sistema no ar):
+**Testes** (`./testes.sh bots`, no ambiente de testes isolado do [README](../README.md#testes), com os serviços no ar e volumes próprios):
 
 - `tests/estrategia`: a estratégia, sem rede. Jogada válida em situações sorteadas, manilhas, carta coberta, truco e blefe, respostas, mão de onze e a regra do parceiro.
 - `tests/servico/test_partidas.py`: uma partida 1x1 de uma pessoa contra um bot e uma 2x2 de uma pessoa com três bots, criadas pelo Lobby e jogadas até o fim pelo container `bots` que está no ar. Conferem também que o bot confirma o pedido no fim e que o Ranking registra a partida da pessoa, sem o bot.
