@@ -4,12 +4,11 @@
 // conforme o estado recebido; quem valida as ações é o servidor.
 // A página abre como mesa.html?partida={partida_id} (o lobby manda para cá quando a partida
 // começa) e conversa com o Game pelo ws.js. Até o primeiro estado chegar, mostra só uma espera.
-// Sem ?partida=, mostra os estados falsos do seletor de desenvolvimento.
+// Sem ?partida=, volta ao lobby.
 
 import { prepararAnimacoes } from "../animacoes.js";
 import { exigirLogin } from "../auth.js";
 import { criarCarta, criarVerso, proximaManilha } from "../cartas.js";
-import * as mocks from "../mock/estados.js";
 import { conectarPartida } from "../ws.js";
 
 const PAGINA_LOBBY = "lobby.html";
@@ -37,7 +36,7 @@ const anuncio = document.getElementById("anuncio");
 // Último estado desenhado (usado para redesenhar quando muda algo local, como "Jogar coberta").
 let estadoAtual = null;
 
-// Conexão com a partida ({ enviar, fechar }, do ws.js). Fica null com os estados falsos.
+// Conexão com a partida ({ enviar, fechar }, do ws.js).
 let conexao = null;
 
 // Estado local da interface, que não vem do servidor.
@@ -45,8 +44,8 @@ const ui = {
   coberta: false,
   rascunhoChat: "",
   focoChat: false,
-  // "conectando", "conectado", "reconectando" ou "recusada"; "local" com os estados falsos
-  conexao: "local",
+  // "conectando", "conectado", "reconectando" ou "recusada"
+  conexao: "conectando",
   motivoRecusa: "",
   erro: null, // mensagem do último erro do servidor, enquanto estiver na tela
   confirmandoSaida: false,
@@ -80,7 +79,7 @@ function derivar(estado) {
   const truco = maoAtual.truco_pendente;
   const minhaVez = maoAtual.vez_assento === estado.meu_assento;
   const encerrada = estado.status === "encerrada";
-  const conectado = ui.conexao === "conectado" || ui.conexao === "local";
+  const conectado = ui.conexao === "conectado";
   // Com a conexão caída ou a partida encerrada, nenhum controle de jogo fica clicável.
   const podeAgir = conectado && !encerrada;
   // Rodada que a próxima carta joga. A rodada nova só entra em "rodadas" com a primeira carta
@@ -101,7 +100,6 @@ function derivar(estado) {
     // O chat continua valendo depois do fim da partida; só precisa da conexão.
     podeConversar: conectado,
     posicaoDe: (assento) => POSICOES[n][(assento - estado.meu_assento + n) % n],
-    timeDe: (assento) => estado.jogadores.find((j) => j.assento === assento)?.time,
     podeJogar: podeAgir && minhaVez && !truco && !maoAtual.aguardando_decisao_mao_de_onze,
     podePedirTruco:
       podeAgir &&
@@ -123,12 +121,10 @@ function derivar(estado) {
 
 // ---------- Envio de ações ----------
 
-// Único ponto de saída das ações do jogador: vai pela conexão com a partida. Com os estados
-// falsos, que não têm conexão, só registra no console. Devolve false se a mensagem não saiu.
-export function enviar(mensagem) {
-  if (conexao) return conexao.enviar(mensagem);
-  console.log("[enviar]", mensagem);
-  return true;
+// Único ponto de saída das ações do jogador: vai pela conexão com a partida. Devolve false se
+// a mensagem não saiu.
+function enviar(mensagem) {
+  return conexao.enviar(mensagem);
 }
 
 function jogarCarta(carta) {
@@ -191,6 +187,14 @@ function criarMaoOculta(quantidade) {
   return mao;
 }
 
+// Nome de um jogador. Nomes longos são cortados com reticências pelo CSS; o nome inteiro fica
+// no title.
+function criarNome(nome, classes) {
+  const elemento = el("span", classes, nome);
+  elemento.title = nome;
+  return elemento;
+}
+
 // Jogador na mesa: plaquinha (time, nome, selos) + a mão já montada.
 function criarJogador(jogador, { posicao, naVez, souEu, mao }) {
   const raiz = el("div", `jogador pos-${posicao} ${classeTime(jogador.time)}`);
@@ -199,7 +203,7 @@ function criarJogador(jogador, { posicao, naVez, souEu, mao }) {
 
   const plaquinha = el("div", "plaquinha");
   plaquinha.title = `Time ${jogador.time}`;
-  plaquinha.append(el("span", "cor-time"), el("span", "nome", jogador.nome));
+  plaquinha.append(el("span", "cor-time"), criarNome(jogador.nome, "nome"));
   if (souEu) plaquinha.append(el("span", "voce", "(você)"));
   if (jogador.bot) plaquinha.append(el("span", "selo-bot", "BOT"));
   plaquinha.append(el("span", "selo-vez", "vez"));
@@ -228,10 +232,10 @@ function criarRodadas(rodadas, ctx) {
 }
 
 // Centro da mesa: cartas da última rodada (a atual, ou a que acabou de terminar), vira com a
-// manilha e marcadores das rodadas. Na rodada decidida, as cartas do time vencedor ficam em
-// destaque enquanto ela continua na mesa: o estado diz só o time que venceu, não a carta.
+// manilha e marcadores das rodadas. Na rodada decidida, a carta vencedora (vencedor_assento, do
+// Game) fica em destaque enquanto a rodada continua na mesa; no empate, nenhuma.
 function criarCentro(maoAtual, ctx) {
-  const { posicaoDe, timeDe } = ctx;
+  const { posicaoDe } = ctx;
   const centro = el("div", "centro");
 
   const rodadaAtual = maoAtual.rodadas.at(-1);
@@ -239,8 +243,9 @@ function criarCentro(maoAtual, ctx) {
   for (const jogada of rodadaAtual?.jogadas ?? []) {
     const item = el("div", `jogada pos-${posicaoDe(jogada.assento)}`);
     item.dataset.assento = jogada.assento;
-    const vencedor = rodadaAtual.vencedor_time;
-    if (vencedor === timeDe(jogada.assento)) item.classList.add("vencedora", classeTime(vencedor));
+    if (jogada.assento === rodadaAtual.vencedor_assento) {
+      item.classList.add("vencedora", classeTime(rodadaAtual.vencedor_time));
+    }
     item.append(jogada.coberta || !jogada.carta ? criarVerso() : criarCarta(jogada.carta));
     jogadas.append(item);
   }
@@ -367,10 +372,7 @@ function criarChat(mensagens, jogadores, rascunho, podeEnviar, aoEnviar, aoDigit
     const item = el("li", "chat-mensagem");
     // O autor ganha a cor do time quando o nome corresponde a um jogador da mesa.
     const autor = jogadores.find((j) => j.nome === mensagem.de);
-    item.append(
-      el("span", `autor ${autor ? classeTime(autor.time) : ""}`, mensagem.de),
-      el("span", "texto", mensagem.texto),
-    );
+    item.append(criarNome(mensagem.de, `autor ${autor ? classeTime(autor.time) : ""}`), el("span", "texto", mensagem.texto));
     lista.append(item);
   }
 
@@ -660,36 +662,15 @@ function entrarNaPartida(partidaId) {
   });
 }
 
-// =====================================================================================
-// FERRAMENTA DE DESENVOLVIMENTO — REMOVER junto com os estados falsos (mock/estados.js).
-// Sem ?partida= na URL, um seletor discreto no canto da mesa alterna entre os estados falsos.
-// O mock escolhido fica no hash da URL (ex.: mesa.html#meio2x2) para sobreviver ao F5.
-// =====================================================================================
-function montarSeletorMock() {
-  const nomes = Object.keys(mocks);
-  const inicial = nomes.includes(location.hash.slice(1)) ? location.hash.slice(1) : nomes[0];
-
-  const seletor = el("select", "dev-seletor-mock");
-  seletor.title = "Mock (ferramenta de desenvolvimento)";
-  for (const nome of nomes) {
-    const opcao = el("option", "", nome);
-    opcao.value = nome;
-    seletor.append(opcao);
-  }
-  seletor.value = inicial;
-  seletor.addEventListener("change", () => {
-    location.hash = seletor.value;
-    ui.coberta = false;
-    renderizarMesa(mocks[seletor.value]);
-  });
-  document.body.append(seletor);
-
-  renderizarMesa(mocks[inicial]);
-}
-
 // ---------- Início ----------
 
 function iniciar() {
+  const partidaId = new URLSearchParams(location.search).get("partida");
+  if (!partidaId) {
+    location.replace(PAGINA_LOBBY);
+    return;
+  }
+
   document.addEventListener("keydown", (evento) => {
     if (evento.key === "Escape" && ui.confirmandoSaida) cancelarSaida();
   });
@@ -699,9 +680,7 @@ function iniciar() {
     if (evento.persisted) location.reload();
   });
 
-  const partidaId = new URLSearchParams(location.search).get("partida");
-  if (partidaId) entrarNaPartida(partidaId);
-  else montarSeletorMock();
+  entrarNaPartida(partidaId);
 }
 
 // A mesa exige login: sem sessão, exigirLogin() manda para a tela de login e a mesa não é montada.

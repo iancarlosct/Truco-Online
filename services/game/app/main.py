@@ -3,14 +3,19 @@
 
 import asyncio
 import contextlib
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from app import banco, eventos
+from app import banco, eventos, seguranca
 from app.erros import erro, registrar_tratadores
 from app.partidas import Partidas
 from app.rotas import rotas
+
+# O Uvicorn registra cada conexão WebSocket com a URL inteira, e o token vai nela: o filtro tira
+# o token dessas linhas (seguranca.py).
+logging.getLogger("uvicorn.error").addFilter(seguranca.SemTokenNoLog())
 
 
 @asynccontextmanager

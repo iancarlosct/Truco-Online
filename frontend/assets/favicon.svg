@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Ícone das abas: uma carta com o paus do zap, nas cores das cartas (css/base.css) -->
+  <rect x="5" y="1.5" width="22" height="29" rx="3.2" fill="#FBF8F1" stroke="#24272C" stroke-width="1.6"/>
+  <g fill="#24272C">
+    <circle cx="16" cy="10.8" r="4.1"/>
+    <circle cx="11.4" cy="16.4" r="4.1"/>
+    <circle cx="20.6" cy="16.4" r="4.1"/>
+    <path d="M16 14.5 L12.9 24.5 H19.1 Z"/>
+  </g>
+</svg>

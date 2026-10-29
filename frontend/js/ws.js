@@ -6,16 +6,6 @@
 
 import { encerrarSessao } from "./api.js";
 import { obterToken } from "./auth.js";
-import { WebSocketSimulado } from "./mock/servidor-game.js";
-
-// =====================================================================================
-// PROVISÓRIO — REMOVER quando o serviço Game existir.
-// Com true, a mesa não abre um WebSocket de verdade: conversa com o servidor simulado de
-// js/mock/servidor-game.js, que imita o WebSocket do navegador e o serviço Game.
-// Com false, a mesma conexão vai para o Game real, pelo gateway, no mesmo endereço da página,
-// sem nenhuma outra mudança no código.
-// =====================================================================================
-const USAR_MOCK_GAME = false;
 
 // Espera antes de cada nova tentativa depois de uma queda: 1 s, 2 s, 4 s, 8 s e, daí em
 // diante, 10 s.
@@ -37,7 +27,10 @@ const MOTIVO_RECUSA = {
   [CONEXAO_SUBSTITUIDA]: "Esta partida foi aberta em outra aba.",
 };
 
-// ws://<endereço da página>/ws/partidas/{partida_id}?token=<jwt>, ou wss:// com HTTPS.
+// ws://<endereço da página>/ws/partidas/{partida_id}?token=<jwt>, ou wss:// com HTTPS: o
+// gateway repassa o /ws/ ao Game. O token vai na URL porque o navegador não deixa pôr
+// cabeçalhos num WebSocket. O gateway (gateway/nginx.conf) e o Game (app/seguranca.py) não o
+// gravam nos logs.
 function enderecoDaPartida(partidaId, token) {
   const protocolo = location.protocol === "https:" ? "wss:" : "ws:";
   const caminho = `/ws/partidas/${encodeURIComponent(partidaId)}`;
@@ -71,7 +64,7 @@ export function conectarPartida(partidaId, { aoReceberEstado, aoReceberErro, aoM
       return;
     }
     const endereco = enderecoDaPartida(partidaId, token);
-    socket = USAR_MOCK_GAME ? new WebSocketSimulado(endereco) : new WebSocket(endereco);
+    socket = new WebSocket(endereco);
     socket.onopen = () => aoMudarConexao("conectado");
     socket.onmessage = (evento) => receber(evento.data);
     socket.onclose = (evento) => aoFechar(evento.code);

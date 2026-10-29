@@ -31,7 +31,9 @@ def outro_time(time: str) -> str:
 
 
 def resultado_da_rodada(jogadas: list[dict], valor_da_manilha: str) -> tuple[str, int]:
-    """Vencedor da rodada completa ("A", "B" ou "empate") e o assento que abre a próxima.
+    """Vencedor da rodada completa ("A", "B" ou "empate") e o assento que abre a próxima. Fora
+    do empate, esse assento é o da carta vencedora. Se os dois parceiros jogam a carta mais
+    forte do time com a mesma força, vale a que foi jogada primeiro.
 
     jogadas: [{"assento", "carta", "coberta"}], na ordem em que foram jogadas.
     """

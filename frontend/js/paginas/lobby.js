@@ -9,6 +9,7 @@
 import {
   ErroApi,
   adicionarBot,
+  conferirSessao,
   criarSala,
   entrarNaSala,
   iniciarPartida,
@@ -23,6 +24,7 @@ import { criarVerso } from "../cartas.js";
 
 const PAGINA_LOGIN = "index.html";
 const PAGINA_MESA = "mesa.html";
+const PAGINA_HISTORICO = "historico.html";
 
 // Intervalo da atualização periódica e tempo que um aviso fica na tela.
 const INTERVALO_ATUALIZACAO_MS = 3000;
@@ -191,11 +193,19 @@ function renderizar() {
   else renderizarLista();
 }
 
-// Nome do usuário logado e botão Sair, no cabeçalho.
+// Endereço do histórico de um jogador (historico.html); sem o id, o do próprio usuário.
+function enderecoDoHistorico(usuarioId) {
+  return usuarioId ? `${PAGINA_HISTORICO}?jogador=${encodeURIComponent(usuarioId)}` : PAGINA_HISTORICO;
+}
+
+// Nome do usuário logado, o link "Meu histórico" e o botão Sair, no cabeçalho.
 function renderizarUsuario() {
   const nome = el("span", "usuario-nome", usuario.nome);
-  nome.title = usuario.email ?? "";
-  trocarConteudo(areaUsuario, nome, botaoDeAcao("logout", "Sair", "botao", sairDaConta));
+  nome.title = usuario.email ? `${usuario.nome} (${usuario.email})` : usuario.nome;
+  const historico = el("a", "botao", "Meu histórico");
+  historico.href = enderecoDoHistorico();
+  historico.dataset.chave = "historico";
+  trocarConteudo(areaUsuario, nome, historico, botaoDeAcao("logout", "Sair", "botao", sairDaConta));
 }
 
 // ---------- Vista 1: lista de salas ----------
@@ -265,7 +275,9 @@ function criarCartaoSala(sala) {
   // Para o leitor de tela, o botão diz de que sala é ("Entrar: sala 2x2 de Maria").
   botao.setAttribute("aria-label", `${botao.textContent}: ${minha ? "sua sala" : "sala"} ${sala.formato}${minha ? "" : ` de ${nomeDono}`}`);
 
-  cartao.append(topo, lugares, el("p", "dono", minha ? "Sua sala" : `Sala de ${nomeDono}`), botao);
+  const textoDono = el("p", "dono", minha ? "Sua sala" : `Sala de ${nomeDono}`);
+  textoDono.title = textoDono.textContent;
+  cartao.append(topo, lugares, textoDono, botao);
   return cartao;
 }
 
@@ -317,7 +329,9 @@ function criarAssento(assento, sala, ctx) {
     if (souEu) raiz.classList.add("meu");
     const plaquinha = el("div", "plaquinha");
     plaquinha.title = `Time ${time}`;
-    plaquinha.append(el("span", "cor-time"), el("span", "nome", assento.nome));
+    const nome = el("span", "nome", assento.nome);
+    nome.title = assento.nome;
+    plaquinha.append(el("span", "cor-time"), nome);
     if (souEu) plaquinha.append(el("span", "voce", "(você)"));
     if (assento.bot) plaquinha.append(el("span", "selo-bot", "BOT"));
     if (assento.usuario_id && assento.usuario_id === sala.dono_id) plaquinha.append(el("span", "selo-dono", "dono"));
@@ -401,10 +415,9 @@ function renderizarSala() {
   const ctx = derivarSala(sala);
   const dono = sala.assentos.find((a) => a.usuario_id === sala.dono_id);
   const topo = el("div", "sala-topo");
-  topo.append(
-    criarTituloVista(ctx.souDono ? `Sua sala ${sala.formato}` : `Sala ${sala.formato} de ${dono?.nome ?? "outro jogador"}`),
-    el("p", "dica", ctx.duplas ? "Parceiros sentam frente a frente." : "Um contra um."),
-  );
+  const titulo = criarTituloVista(ctx.souDono ? `Sua sala ${sala.formato}` : `Sala ${sala.formato} de ${dono?.nome ?? "outro jogador"}`);
+  titulo.title = titulo.textContent;
+  topo.append(titulo, el("p", "dica", ctx.duplas ? "Parceiros sentam frente a frente." : "Um contra um."));
 
   // A mesa vista de cima, como na mesa de jogo: você embaixo e os outros em volta.
   const feltro = el("div", "feltro");
@@ -488,12 +501,18 @@ function criarTabelaRanking(linhas) {
   return tabela;
 }
 
+// O nome de cada jogador leva ao histórico dele.
 function criarLinhaRanking(linha) {
   const souEu = linha.usuario_id === usuario.id;
   const tr = el("tr", souEu ? "eu" : "");
   const nome = el("td", "nome");
-  nome.append(el("span", "nome-jogador", linha.nome));
-  if (souEu) nome.append(el("span", "voce", "(você)"));
+  const celula = el("div", "celula-nome");
+  const link = el("a", "nome-jogador", linha.nome);
+  link.href = enderecoDoHistorico(linha.usuario_id);
+  link.title = linha.nome;
+  celula.append(link);
+  if (souEu) celula.append(el("span", "voce", "(você)"));
+  nome.append(celula);
   tr.append(
     el("td", "posicao", `${linha.posicao}º`),
     nome,
@@ -804,4 +823,6 @@ function iniciar() {
   });
 }
 
-if (exigirLogin()) iniciar();
+// Sem sessão, exigirLogin() manda para o login; com um token que o Auth recusa, conferirSessao()
+// manda para o login com o aviso de sessão expirada. Nos dois casos a página não é montada.
+if (exigirLogin() && (await conferirSessao())) iniciar();

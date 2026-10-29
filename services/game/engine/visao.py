@@ -59,6 +59,8 @@ def visao_do_jogador(estado: dict, assento: int) -> dict:
                         for jogada in rodada["jogadas"]
                     ],
                     "vencedor_time": rodada["vencedor_time"],
+                    # .get: uma partida gravada antes de o campo existir não o tem nas rodadas.
+                    "vencedor_assento": rodada.get("vencedor_assento"),
                 }
                 for rodada in mao["rodadas"]
             ],

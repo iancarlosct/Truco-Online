@@ -1,0 +1,3 @@
+# Scripts de shell sempre com fim de linha LF: com CRLF (um clone no Windows com autocrlf), o
+# bash não consegue rodar o testes.sh.
+*.sh text eol=lf

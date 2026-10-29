@@ -5,7 +5,7 @@
 import { cadastrar, login, ErroApi } from "../api.js";
 import { estaLogado, salvarSessao } from "../auth.js";
 
-// Página aberta depois do login. Ainda não existe: será criada junto com o lobby.
+// Página aberta depois do login.
 const PAGINA_APOS_LOGIN = "lobby.html";
 
 // Limites dos campos do cadastro.

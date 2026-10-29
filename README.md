@@ -4,187 +4,187 @@ Jogo de truco paulista online, com partidas 1x1 e 2x2 contra pessoas ou bots. Tr
 
 Requisitos completos, contratos das APIs e formato das mensagens: [documento de requisitos e contratos](https://claude.ai/code/artifact/37cda24d-3d94-4e3d-93b8-99790ba8252e).
 
+## Visão geral
+
+O sistema roda no navegador, sem instalar nada além do Docker no computador que o hospeda:
+
+- **Conta:** cadastro e login. A sessão dura 24 horas.
+- **Lobby:** lista de salas abertas, atualizada a cada 3 segundos. Cada pessoa cria uma sala 1x1 ou 2x2, escolhe o assento, chama os amigos pelo link da sala e completa as vagas com bots. Quem criou a sala inicia a partida.
+- **Mesa:** truco paulista completo, com manilha pela vira, carta coberta, truco, seis, nove e doze, mão de onze e mão de ferro. Chat da mesa, animações (carta indo para a mesa, distribuição, pedido de truco, vencedor da rodada, placar e comemoração no fim) e reconexão automática se a conexão cair.
+- **Bots:** um jogador automático que entra nas vagas de bot, joga com 1 a 2 segundos de "pensamento" e, no 2x2, deixa o truco e a mão de onze para o parceiro humano.
+- **Ranking e histórico:** os 10 jogadores com mais vitórias e a sua posição, e o histórico de cada jogador, com as estatísticas e as últimas partidas.
+
 ## Stack
 
 - Backend: Python com FastAPI
 - Frontend: HTML, CSS e JavaScript puro
-- Banco: Postgres, uma instância por serviço que guarda usuários e salas (`auth-db`, `lobby-db`, `ranking-db`)
-- Estado das partidas: Redis só do Game (`game-redis`)
+- Bancos: Postgres, uma instância por serviço que guarda usuários, salas e ranking (`auth-db`, `lobby-db`, `ranking-db`); Redis só do Game para o estado das partidas (`game-redis`)
 - Eventos entre os serviços: outro Redis, o broker `eventos`, com Redis Streams
 - Gateway: Nginx
 - Tudo roda com Docker Compose
-
-## Serviços
-
-| Serviço | O que faz | Situação |
-|---|---|---|
-| `gateway` | Nginx. Roteia `/api` para os serviços, `/ws` para o Game e serve o frontend | Pronto (`/api/auth/`, `/api/lobby/`, `/api/ranking`, `/ws/` e frontend) |
-| `auth` | Cadastro, login e emissão de JWT | Pronto, com o banco `auth-db` |
-| `lobby` | Salas 1x1 e 2x2, assentos, adição de bots, presença e início da partida | Pronto, com o banco `lobby-db` |
-| `game` | Regras do truco, estado da partida, WebSocket e chat da mesa | Pronto, com o banco `game-redis` |
-| `bots` | Jogador automático que se conecta ao Game como um cliente comum | Pronto, sem banco: os bots em jogo ficam guardados no próprio broker |
-| `ranking` | Vitórias, partidas e histórico de cada jogador, a partir do evento `partida.finalizada` | Pronto, com o banco `ranking-db` |
-
-Além dos serviços, há os containers de dados e de comunicação:
-
-| Container | O que é | Quem acessa |
-|---|---|---|
-| `auth-db` | Postgres do Auth: os usuários | Só o `auth` |
-| `lobby-db` | Postgres do Lobby: as salas e os assentos | Só o `lobby` |
-| `ranking-db` | Postgres do Ranking: as partidas registradas e as vitórias de cada jogador | Só o `ranking` |
-| `game-redis` | Redis do Game: o estado das partidas | Só o `game` |
-| `eventos` | Broker de eventos (Redis Streams): `partida.criada`, `partida.finalizada` e `bot.solicitado` | O `game` publica as partidas; o `lobby` lê `partida.finalizada` e publica `bot.solicitado`; o `ranking` lê `partida.finalizada`; o `bots` lê `bot.solicitado` |
 
 ## Arquitetura
 
 O sistema é dividido em microserviços. Cada serviço é um processo independente, num container próprio, com o seu diretório em `services/<nome>/`: código, `Dockerfile`, `requirements.txt` e testes. Nenhum serviço importa código de outro, e não há pacotes compartilhados entre eles.
 
-```
-navegador ──> gateway (Nginx, única porta aberta no computador)
-                ├── /              arquivos de frontend/
-                ├── /api/auth/     auth ────> auth-db (Postgres só do Auth)
-                ├── /api/lobby/    lobby ───> lobby-db (Postgres só do Lobby)
-                │                    ├──────> game: POST /interno/partidas (fora do gateway)
-                │                    └──────> eventos (lê partida.finalizada, publica bot.solicitado)
-                ├── /api/ranking   ranking ─> ranking-db (Postgres só do Ranking)
-                │                    └──────> eventos (lê partida.finalizada)
-                └── /ws/           game ────> game-redis (Redis só do Game: as partidas)
-                                     └──────> eventos (publica partida.criada e partida.finalizada)
+```mermaid
+flowchart LR
+    navegador([Navegador]) -->|"HTTP e WebSocket<br>(única porta aberta)"| gateway[gateway<br>Nginx]
+    gateway -.->|"/"| frontend[/"arquivos de frontend/"/]
+    gateway -->|/api/auth/| auth[auth]
+    gateway -->|/api/lobby/| lobby[lobby]
+    gateway -->|/api/ranking| ranking[ranking]
+    gateway -->|/ws/| game[game]
 
-bots (ninguém o chama, nem o gateway) ──> eventos (lê bot.solicitado)
-                                      └─> game: WebSocket da mesa, ws://game:8000 (como um jogador)
+    auth --- authdb[(auth-db<br>Postgres)]
+    lobby --- lobbydb[(lobby-db<br>Postgres)]
+    ranking --- rankingdb[(ranking-db<br>Postgres)]
+    game --- gameredis[(game-redis<br>Redis)]
+
+    lobby -->|POST /interno/partidas| game
+    bots[bots] -->|"WebSocket da mesa<br>(como um jogador)"| game
+
+    game -->|"partida.criada<br>partida.finalizada"| eventos{{"eventos<br>broker Redis Streams"}}
+    lobby -->|bot.solicitado| eventos
+    eventos -->|partida.finalizada| lobby
+    eventos -->|partida.finalizada| ranking
+    eventos -->|bot.solicitado| bots
 ```
 
 - **O navegador só fala com o gateway.** O Nginx é o único container com porta aberta no computador. Ele entrega o frontend, repassa cada `/api/...` ao serviço certo e o `/ws/` (WebSocket da mesa) ao Game, sempre com o caminho inteiro (`/api/auth/login` chega ao Auth como `/api/auth/login`).
-- **Um banco por serviço.** Cada serviço que guarda dados tem o próprio banco, num container próprio, com volume e credenciais próprios: `auth-db`, `lobby-db` e `ranking-db` (Postgres) para o Auth, o Lobby e o Ranking, e `game-redis` (Redis) para o Game. Nenhum serviço conecta no banco de outro.
+- **Um banco por serviço.** Cada serviço que guarda dados tem o próprio banco, num container próprio, com volume e credenciais próprios. Nenhum serviço conecta no banco de outro.
 - **Dados e eventos ficam separados.** O `game-redis` guarda os dados do Game, e só o Game o acessa. O broker `eventos` é outro Redis, usado só para a comunicação entre os serviços (um stream por evento): o Game publica `partida.criada` e `partida.finalizada`; o Lobby lê `partida.finalizada` (encerra a sala) e publica `bot.solicitado`; o Ranking lê `partida.finalizada` (soma as vitórias); o Bots lê `bot.solicitado` (põe um bot na mesa). O formato dos eventos está no [guia da mesa](docs/guia-backend-mesa.md), seção 10.4, e no [guia do lobby](docs/guia-backend-lobby.md), seção 11.3.
-- **Redes separadas.** Cada banco fica numa rede só com o seu serviço (`rede-auth-db`, `rede-lobby-db`, `rede-ranking-db`, `rede-game-redis`). O broker fica na `rede-eventos`, só com quem publica ou lê eventos (Game, Lobby, Ranking e Bots). O gateway e os serviços conversam na `rede-servicos`. O gateway não alcança nenhum banco nem o broker. O começo do `docker-compose.yml` explica essa organização, que se repete a cada serviço novo.
+- **Redes separadas.** Cada banco fica numa rede só com o seu serviço (`rede-auth-db`, `rede-lobby-db`, `rede-ranking-db`, `rede-game-redis`). O broker fica na `rede-eventos`, só com quem publica ou lê eventos (Game, Lobby, Ranking e Bots). O gateway e os serviços conversam na `rede-servicos`. O gateway não alcança nenhum banco nem o broker. O começo do `docker-compose.yml` explica essa organização.
 - **Comunicação só pelas interfaces públicas:** HTTP, WebSocket e eventos. Cada serviço confere o token (JWT) sozinho, com o mesmo `JWT_SEGREDO`, sem chamar o Auth. As rotas internas entre serviços, como o `POST /interno/partidas` do Game, que o Lobby chama ao iniciar a partida, ficam fora do gateway.
-- Toda jogada é validada no Game. O frontend só envia a intenção ("jogar carta X").
-- **Animações da mesa** (`frontend/js/animacoes.js`): carta indo para a mesa, distribuição, pedido de truco em destaque, vencedor da rodada, placar contando e comemoração no fim, derivadas da comparação entre o estado anterior e o novo, sem regras do jogo e sem atrasar nenhum estado; com o `prefers-reduced-motion` ligado no sistema, nada se move, só aparece com fades curtos.
-- Nenhum jogador recebe as cartas dos outros.
-- O Game roda num processo só: as conexões da mesa ficam na memória dele (detalhes em [Limitações desta fase](#limitações-desta-fase)).
+- **Toda jogada é validada no Game.** O frontend só envia a intenção ("jogar carta X") e se redesenha a partir do estado que o Game manda. Nenhum jogador recebe as cartas dos outros.
 - **O bot é um jogador como outro qualquer.** O serviço de Bots não importa código do Game: cada bot conecta ao WebSocket da mesa com um token que o próprio serviço assina, recebe só a visão dele do estado e envia as mesmas mensagens que a tela.
+- **Animações da mesa** (`frontend/js/animacoes.js`): derivadas da comparação entre o estado anterior e o novo, sem regras do jogo e sem atrasar nenhum estado. Com o `prefers-reduced-motion` ligado no sistema, nada se move, só aparece com fades curtos.
+- **O token não fica nos logs.** Ele vai na URL do WebSocket (o navegador não deixa pôr cabeçalhos numa conexão WebSocket), e o gateway e o Game o tiram das linhas de log (`gateway/nginx.conf` e `services/game/app/seguranca.py`).
+
+### Serviços e containers
+
+| Serviço | O que faz | Banco |
+|---|---|---|
+| `gateway` | Nginx. Serve o frontend e roteia `/api/auth/`, `/api/lobby/`, `/api/ranking` e `/ws/` | Nenhum |
+| `auth` | Cadastro, login e emissão do JWT | `auth-db` (Postgres): os usuários |
+| `lobby` | Salas 1x1 e 2x2, assentos, adição de bots, presença e início da partida | `lobby-db` (Postgres): as salas e os assentos |
+| `game` | Regras do truco, estado da partida, WebSocket e chat da mesa | `game-redis` (Redis): o estado das partidas |
+| `bots` | Jogador automático que se conecta ao Game como um cliente comum | Nenhum: os bots em jogo ficam guardados no próprio broker |
+| `ranking` | Vitórias, partidas e histórico de cada jogador, a partir do evento `partida.finalizada` | `ranking-db` (Postgres): as partidas registradas e as vitórias de cada jogador |
+| `eventos` | Broker de eventos (Redis Streams): `partida.criada`, `partida.finalizada` e `bot.solicitado` | Guarda só as mensagens em trânsito |
 
 ## Estrutura do repositório
 
 ```
 truco-online/
-├── docker-compose.yml
-├── .env.example        # modelo do .env (configuração e segredos)
-├── gateway/            # nginx.conf
-├── frontend/           # html, css, js
-├── docs/               # guias do que o frontend espera de cada serviço
+├── docker-compose.yml   # todos os containers, as redes e os volumes
+├── .env.example         # modelo do .env (configuração e segredos)
+├── testes.sh            # roda os testes de todos os serviços num ambiente isolado
+├── gateway/
+│   └── nginx.conf
+├── frontend/            # servido pelo gateway, sem build
+│   ├── index.html       # login e cadastro
+│   ├── lobby.html       # lista de salas, sala de espera e ranking
+│   ├── mesa.html        # a mesa de jogo
+│   ├── historico.html   # histórico de um jogador
+│   ├── css/
+│   ├── assets/          # cartas (SVG) e favicon
+│   └── js/
+│       ├── api.js       # chamadas HTTP aos serviços
+│       ├── auth.js      # sessão (token no localStorage)
+│       ├── ws.js        # conexão da mesa com o Game, com reconexão
+│       ├── cartas.js    # imagem e manilha de cada carta
+│       ├── animacoes.js # animações da mesa
+│       └── paginas/     # um módulo por página
+├── docs/                # guias do que o frontend espera de cada serviço e do que cada um decidiu
 └── services/
     ├── auth/
-    │   ├── app/        # FastAPI: rotas, banco, senha e JWT
-    │   └── tests/      # pytest
+    │   ├── app/         # FastAPI: rotas, banco, senha e JWT
+    │   └── tests/       # pytest
     ├── lobby/
-    │   ├── app/        # FastAPI: rotas e regras das salas, banco, chamada ao Game e eventos
-    │   └── tests/      # pytest, com um Game falso
+    │   ├── app/         # FastAPI: rotas e regras das salas, banco, chamada ao Game e eventos
+    │   └── tests/       # pytest, com um Game falso
     ├── game/
-    │   ├── engine/     # motor de regras em Python puro, sem FastAPI, Redis nem I/O
-    │   ├── app/        # FastAPI: WebSocket da mesa, rota interna, Redis e eventos
-    │   ├── scripts/    # partida_de_teste.py: cria uma partida sem o Lobby
-    │   └── tests/      # pytest: engine/ (motor) e app/ (serviço)
+    │   ├── engine/      # motor de regras em Python puro, sem FastAPI, Redis nem I/O
+    │   ├── app/         # FastAPI: WebSocket da mesa, rota interna, Redis e eventos
+    │   ├── scripts/     # partida_de_teste.py: cria uma partida sem o Lobby
+    │   └── tests/       # pytest: engine/ (motor) e app/ (serviço)
     ├── bots/
-    │   ├── app/        # leitura do bot.solicitado, conexão com a mesa e a estratégia do bot
-    │   └── tests/      # pytest: estrategia/ (sem rede) e servico/ (com os serviços no ar)
+    │   ├── app/         # leitura do bot.solicitado, conexão com a mesa e a estratégia do bot
+    │   └── tests/       # pytest: estrategia/ (sem rede) e servico/ (com os serviços no ar)
     └── ranking/
-        ├── app/        # FastAPI: ranking, histórico, banco e leitura do partida.finalizada
-        └── tests/      # pytest
+        ├── app/         # FastAPI: ranking, histórico, banco e leitura do partida.finalizada
+        └── tests/       # pytest
 ```
 
 ## Como rodar
 
 Precisa do Docker com o Docker Compose v2 (`docker compose version`).
 
-1. Crie o `.env` a partir do modelo e troque os valores de exemplo:
+### 1. Configure o `.env`
 
-   ```bash
-   cp .env.example .env
-   ```
+Crie o `.env` a partir do modelo e troque os valores de exemplo:
 
-   | Variável | Para quê |
-   |---|---|
-   | `GATEWAY_PORTA` | Porta do computador em que o sistema atende. Padrão: `80`. Se ela estiver ocupada, use outra, como `8080`. |
-   | `JWT_SEGREDO` | Segredo que assina os tokens, o mesmo para todos os serviços. Mínimo de 32 caracteres. Para gerar: `python3 -c "import secrets; print(secrets.token_hex(32))"` |
-   | `AUTH_DB_NOME`, `AUTH_DB_USUARIO`, `AUTH_DB_SENHA` | Nome, usuário e senha do banco do Auth. |
-   | `GAME_REDIS_SENHA` | Senha do Redis do Game (`game-redis`). |
-   | `EVENTOS_SENHA` | Senha do broker de eventos. Todos os serviços que publicam ou leem eventos usam a mesma. |
-   | `LOBBY_DB_NOME`, `LOBBY_DB_USUARIO`, `LOBBY_DB_SENHA` | Nome, usuário e senha do banco do Lobby (`lobby-db`). |
-   | `RANKING_DB_NOME`, `RANKING_DB_USUARIO`, `RANKING_DB_SENHA` | Nome, usuário e senha do banco do Ranking (`ranking-db`). |
-   | `BOTS_SEMENTE` | Opcional. Semente do sorteio dos bots: com ela, o mesmo bot repete as mesmas escolhas nas mesmas situações. Sem ela, cada partida é diferente. |
+```bash
+cp .env.example .env
+```
 
-   O `.env` não vai para o repositório (está no `.gitignore`). Sem ele, o Docker Compose para com uma mensagem dizendo qual variável falta. Quem já tinha o `.env` de uma fase anterior precisa acrescentar as variáveis novas (as `LOBBY_DB_*` e `RANKING_DB_*`, da fase 3; a fase 4 não pede nenhuma obrigatória): copie as linhas do `.env.example` e troque as senhas. Para gerar uma: `python3 -c "import secrets; print(secrets.token_hex(16))"`.
+| Variável | Para quê |
+|---|---|
+| `GATEWAY_PORTA` | Porta do computador em que o sistema atende. Padrão: `80`. Se ela estiver ocupada, use outra, como `8080`. |
+| `JWT_SEGREDO` | Segredo que assina os tokens, o mesmo para todos os serviços. Mínimo de 32 caracteres. Para gerar: `python3 -c "import secrets; print(secrets.token_hex(32))"` |
+| `AUTH_DB_NOME`, `AUTH_DB_USUARIO`, `AUTH_DB_SENHA` | Nome, usuário e senha do banco do Auth (`auth-db`). |
+| `LOBBY_DB_NOME`, `LOBBY_DB_USUARIO`, `LOBBY_DB_SENHA` | Nome, usuário e senha do banco do Lobby (`lobby-db`). |
+| `RANKING_DB_NOME`, `RANKING_DB_USUARIO`, `RANKING_DB_SENHA` | Nome, usuário e senha do banco do Ranking (`ranking-db`). |
+| `GAME_REDIS_SENHA` | Senha do Redis do Game (`game-redis`). |
+| `EVENTOS_SENHA` | Senha do broker de eventos. Todos os serviços que publicam ou leem eventos usam a mesma. |
+| `BOTS_SEMENTE` | Opcional. Semente do sorteio dos bots: com ela, o mesmo bot repete as mesmas escolhas nas mesmas situações. Sem ela, cada partida é diferente. |
 
-2. Suba tudo:
+Para gerar uma senha: `python3 -c "import secrets; print(secrets.token_hex(16))"`.
 
-   ```bash
-   docker compose up --build
-   ```
+- O `.env` não vai para o repositório (está no `.gitignore`). Sem ele, ou sem uma variável obrigatória, o Docker Compose para com uma mensagem dizendo qual falta.
+- O usuário e a senha de cada Postgres ficam gravados no volume na primeira vez que ele sobe. Se você trocar `AUTH_DB_*`, `LOBBY_DB_*` ou `RANKING_DB_*` depois disso, o serviço não consegue mais entrar no banco: rode `docker compose down -v` para recomeçar com os valores novos (apaga os dados de todos). As senhas dos dois Redis não ficam no volume: uma troca em `GAME_REDIS_SENHA` ou `EVENTOS_SENHA` vale no próximo `docker compose up -d`.
 
-3. Acesse `http://localhost` (ou `http://localhost:<GATEWAY_PORTA>`).
+### 2. Suba tudo
 
-Comandos do dia a dia:
+```bash
+docker compose up --build -d
+```
+
+Espere o `docker compose ps` mostrar os serviços e os bancos como `healthy` (uns 30 segundos na primeira vez, depois do build).
+
+### 3. Acesse
+
+Abra `http://localhost` (ou `http://localhost:<GATEWAY_PORTA>`).
+
+### Comandos do dia a dia
 
 | Comando | O que faz |
 |---|---|
-| `docker compose up --build -d` | Sobe em segundo plano |
+| `docker compose up --build -d` | Sobe em segundo plano, com o código atual |
 | `docker compose ps` | Mostra os containers; os serviços e os bancos ficam `healthy` quando estão prontos |
 | `docker compose logs -f lobby` | Acompanha o log de um serviço |
 | `docker compose down` | Para e remove os containers. Os usuários, as salas, as partidas, o ranking e os eventos continuam nos volumes |
-| `docker compose down -v` | Para e **apaga também os volumes**: usuários, salas, partidas, ranking e eventos |
+| `docker compose down -v` | Para e **apaga também os volumes** (veja [Limpar os dados](#limpar-os-dados)) |
 
 - Mudanças em `frontend/` valem no próximo F5: o gateway lê os arquivos direto da pasta. Mudanças no `gateway/nginx.conf` pedem `docker compose restart gateway`, e mudanças no código de um serviço, `docker compose up --build -d`.
-- O usuário e a senha de cada Postgres ficam gravados no volume na primeira vez que ele sobe. Se você trocar `AUTH_DB_*`, `LOBBY_DB_*` ou `RANKING_DB_*` depois disso, o serviço não consegue mais entrar no banco. Para recomeçar com os valores novos, rode `docker compose down -v` (apaga os dados de todos). As senhas dos dois Redis não ficam no volume: uma troca em `GAME_REDIS_SENHA` ou `EVENTOS_SENHA` vale no próximo `docker compose up -d`.
 - As páginas de testes do FastAPI (o `/docs`) abrem pelo gateway: `http://localhost/api/auth/docs`, `http://localhost/api/lobby/docs` e `http://localhost/api/ranking/docs`. A do Game fica em `/interno/docs`, fora do gateway.
 - Para olhar dentro dos Redis: `docker compose exec game-redis redis-cli --scan --pattern 'partida:*'` lista as partidas; `docker compose exec eventos redis-cli XRANGE partida.finalizada - +` mostra os eventos de fim de partida, `XRANGE bot.solicitado - +`, os pedidos de bot, e `XPENDING bot.solicitado bots`, quantos bots estão em jogo (os pedidos que o serviço de Bots ainda não confirmou).
 - Para olhar dentro dos Postgres: `docker compose exec lobby-db sh -c 'psql -U "$POSTGRES_USER" "$POSTGRES_DB"'` (troque por `ranking-db` ou `auth-db`).
 
-### Testes
-
-Os testes do Auth rodam dentro do container, com o Postgres de verdade. Eles usam um banco separado no `auth-db` (`auth_teste`, criado sozinho) e não mexem nos usuários cadastrados:
+### Limpar os dados
 
 ```bash
-docker compose run --rm --build auth pytest
+docker compose down -v
 ```
 
-O `--build` reconstrói a imagem antes, para os testes rodarem com o código atual.
+Apaga os containers e os cinco volumes: usuários, salas, partidas, ranking e eventos. No próximo `docker compose up --build -d`, o sistema começa vazio, e cada serviço cria as suas tabelas sozinho.
 
-Os testes do Game também rodam no container:
+Quem estava logado no navegador continua com o token guardado, mas o usuário dele não existe mais: ao abrir o lobby, a tela volta para o login com "Sua sessão expirou. Entre novamente.". Basta criar a conta de novo.
 
-```bash
-docker compose run --rm --build game pytest
-```
+## Como jogar
 
-- `tests/engine`: o motor de regras. Cartas e manilhas, empates, carta coberta, truco, mão de onze, mão de ferro, visão de cada jogador e partidas completas simuladas em 1x1 e 2x2. O motor não depende de nada além do Python, então `pytest tests/engine`, dentro de `services/game`, roda também fora do Docker, só com o `pytest` instalado.
-- `tests/app`: a camada de serviço, com os dois Redis de verdade. A rota interna, os eventos (inclusive com o broker fora do ar), o WebSocket com os fechamentos 4401, 4403 e 4404, a reconexão, a conexão substituída, a pausa entre as mãos e o fim da partida. Eles usam o banco lógico 1 de cada Redis (o serviço usa o 0) e não mexem nas partidas nem nos eventos de quem está usando o sistema.
-
-Os do Lobby e do Ranking também:
-
-```bash
-docker compose run --rm --build lobby pytest
-docker compose run --rm --build ranking pytest
-```
-
-- Como no Auth, cada um usa um banco de teste no próprio Postgres (`lobby_teste` e `ranking_teste`, criados sozinhos). No broker, usam bancos lógicos próprios (2 no Lobby, 3 no Ranking), então não mexem nas salas, no ranking nem nos eventos de quem está usando o sistema.
-- O Lobby testa a chamada ao Game com um Game falso, dentro do próprio teste: dá para simular o Game fora do ar ou lento, e nenhuma partida é criada no Game de verdade.
-- Os dois testam a leitura do `partida.finalizada` publicando no broker: o mesmo evento várias vezes, fora do formato, com o serviço parado, lido e não confirmado antes de uma queda e, no Ranking, publicado antes de o serviço existir. Detalhes no [guia do lobby](docs/guia-backend-lobby.md), seção 11.6.
-
-Os do Bots precisam do sistema inteiro no ar, com o código atual (o `--build` do `up` reconstrói o container `bots`, que joga as partidas dos testes):
-
-```bash
-docker compose up -d --build
-docker compose run --rm bots pytest
-```
-
-- `tests/estrategia`: a estratégia do bot, sem rede (jogada válida em cada situação, manilhas, carta coberta, truco, mão de onze, a regra do parceiro humano). Roda também fora do Docker: `pytest tests/estrategia`, dentro de `services/bots`.
-- `tests/servico/test_partidas.py`: uma partida 1x1 de uma pessoa contra um bot e uma 2x2 de uma pessoa com três bots, criadas pelo Lobby e jogadas até o fim pelo container `bots`. Levam uns 40 segundos: os bots esperam de 1 a 2 segundos antes de cada jogada.
-- `tests/servico/test_retomada.py`: o serviço caindo no meio de uma partida, com o bot voltando a jogar, e o mesmo pedido de bot chegando várias vezes sem criar outro bot. Aqui o serviço roda dentro do teste, no banco lógico 4 do broker, com partidas criadas direto no Game: o container `bots` não as vê.
-- A pessoa dos testes é a "Teste dos Bots", sempre com o mesmo id, e as partidas que terminam contam para ela no ranking, como as do script de teste do Game.
-
-### Testar o fluxo completo com dois navegadores
+### Dois navegadores
 
 O fluxo normal é todo pela tela, com os serviços de verdade: cadastro, sala, partida e ranking.
 
@@ -194,33 +194,29 @@ O fluxo normal é todo pela tela, com os serviços de verdade: cadastro, sala, p
 4. Na aba de `localhost`, clique em "Criar sala 1x1". Na de `127.0.0.1`, a sala aparece na lista em até 3 segundos: clique em "Entrar".
 5. Quem criou a sala (o dono) clica em "Iniciar partida". Os dois vão para a mesa: o dono na hora, o outro em até 3 segundos.
 6. Joguem até um time chegar a 12 pontos. Na tela de fim de partida, cliquem em "Voltar ao lobby".
-7. O painel do ranking, à direita, mostra os dois com as vitórias e as partidas atualizadas. A sala saiu da lista, e os dois já podem criar ou entrar em outra.
+7. O painel do ranking, à direita, mostra os dois com as vitórias e as partidas atualizadas. "Meu histórico", no cabeçalho, e o nome de cada jogador no ranking abrem o histórico com as últimas partidas. A sala saiu da lista, e os dois já podem criar ou entrar em outra.
 
 Outros casos para conferir:
 
 - **2x2 com quatro pessoas:** são quatro sessões, por exemplo `localhost` e `127.0.0.1` numa janela normal e de novo numa janela anônima. A partida começa com os quatro na mesa, parceiros frente a frente.
-- **Bots:** uma sala completada com bots começa, e os bots jogam sozinhos ([Testar contra bots](#testar-contra-bots)).
 - **Link de convite:** o endereço da sala (`lobby.html?sala=...`) mostra a sala a quem não está nela, que escolhe uma vaga.
 - **Presença:** quem fecha a aba da sala de espera sai da sala depois de 60 segundos; se for o dono, a sala é encerrada.
+- **Queda e F5:** um F5 na mesa, ou a conexão caindo, volta para a mesma partida, no ponto em que ela estava.
 
-Se a tela pular direto para o lobby e voltar para o login, sobrou uma sessão de outro teste: veja [Mock ou serviço real](#mock-ou-serviço-real-limpe-o-localstorage).
+### Contra bots
 
-### Testar contra bots
-
-Com uma pessoa só, pela tela:
-
-1. Suba tudo (`docker compose up --build -d`), abra `http://localhost/` e entre (ou crie uma conta).
+1. Abra `http://localhost/` e entre (ou crie uma conta).
 2. Clique em "Criar sala 1x1". Na vaga do assento 1, clique em "Adicionar bot": entra o "Bot 1", com o selo "BOT".
 3. Clique em "Iniciar partida". Na mesa, o bot joga sozinho, esperando de 1 a 2 segundos antes de cada jogada: joga as cartas, pede truco, responde e decide a mão de onze.
-4. Jogue até um time chegar a 12 e clique em "Voltar ao lobby". O ranking mostra a sua partida; o bot não entra no ranking (ele fica só no histórico da partida, em `GET /api/ranking/jogadores/{id}`).
+4. Jogue até um time chegar a 12 e clique em "Voltar ao lobby". O ranking mostra a sua partida; o bot não entra no ranking (ele aparece só no histórico da partida).
 
 No 2x2, ponha bots nas outras três vagas: o do assento 2, seu parceiro, deixa para você responder ao truco e decidir a mão de onze (vale a primeira resposta do time); no time adversário, quem responde é o bot do assento 1.
 
 Para acompanhar os bots: `docker compose logs -f bots` mostra cada bot que entra numa partida, as quedas de conexão e a saída no fim, com quantas ações ele fez. Para ver o bot voltar sozinho depois de um reinício, rode `docker compose restart bots` no meio de uma partida: a vez dele fica parada uns segundos, e ele volta de onde parou.
 
-### Testar o Game sem o Lobby
+### Uma partida sem passar pelo Lobby
 
-O script de desenvolvimento do Game continua existindo, para testar a mesa sem passar pelo lobby. Ele cria uma partida 1x1 direto na rota interna `POST /interno/partidas`, a mesma que o Lobby chama:
+O script de desenvolvimento do Game cria uma partida 1x1 direto na rota interna `POST /interno/partidas`, a mesma que o Lobby chama:
 
 ```bash
 docker compose exec game python scripts/partida_de_teste.py
@@ -228,24 +224,63 @@ docker compose exec game python scripts/partida_de_teste.py
 
 Se o gateway estiver em outra porta, passe a `GATEWAY_PORTA`: `docker compose exec game python scripts/partida_de_teste.py --porta 8080`.
 
-Ele cadastra (ou só faz o login de) dois usuários de teste no Auth, pelo gateway: `ana.teste@truco.dev` e `beto.teste@truco.dev`, os dois com a senha `truco123`. Depois cria a partida e imprime o que abrir para cada jogador: a Ana em `http://localhost/`, o Beto em `http://127.0.0.1/`. Não é preciso mudar nada no frontend. Como é uma partida de verdade entre dois usuários, ela conta no ranking quando termina; como não tem sala, o Lobby não muda nada.
+Ele cadastra (ou só faz o login de) dois usuários de teste no Auth, pelo gateway: `ana.teste@truco.dev` e `beto.teste@truco.dev`, os dois com a senha `truco123`. Depois cria a partida e imprime o que abrir para cada jogador: a Ana em `http://localhost/`, o Beto em `http://127.0.0.1/`. Como é uma partida de verdade entre dois usuários, ela conta no ranking quando termina; como não tem sala, o Lobby não muda nada.
 
-### Mock ou serviço real: limpe o localStorage
+## Testes
 
-Desde a fase 3, a tela fala com todos os serviços de verdade: `USAR_MOCK`, `USAR_MOCK_LOBBY` e `USAR_MOCK_RANKING`, em `frontend/js/api.js`, e `USAR_MOCK_GAME`, em `frontend/js/ws.js`, estão em `false`. O código dos mocks e as ferramentas de desenvolvimento continuam nos arquivos, desligados, e saem no fechamento do projeto (fase 6). Para voltar a simular um serviço no navegador (para mexer só na tela, por exemplo), troque a chave dele para `true`, sem fazer commit da troca.
+Os testes de todos os serviços rodam num ambiente isolado: um projeto separado do Docker Compose, `truco-testes`, com containers, redes e **volumes próprios**. Os usuários, as salas, as partidas e o ranking de quem usa o sistema não são tocados, e o sistema pode continuar no ar enquanto os testes rodam (o ambiente de testes não sobe o gateway e não ocupa nenhuma porta do computador).
 
-**Sempre que trocar um mock pelo serviço real (ou o contrário), limpe o localStorage do navegador.** Uma sessão antiga, criada pelo mock, continua guardada: a tela de login pula direto para o lobby, o Lobby recusa o token falso com 401, e a tela volta para o login. Para limpar, aperte F12, vá ao Console, rode `localStorage.clear()` e recarregue a página.
+```bash
+./testes.sh              # todas as suítes: auth, game, lobby, ranking e bots
+./testes.sh game bots    # só as indicadas
+```
 
-### Limitações desta fase
+O script sobe o ambiente com o código atual (`--build`), roda o `pytest` de cada serviço dentro do container dele e, no fim, apaga o ambiente com os volumes, passando ou não. Leva uns 3 minutos depois do build; a maior parte são as partidas dos testes dos Bots. A saída termina em "Todas as suítes passaram" ou com a lista das que falharam (e o script sai com erro).
 
-- **Um processo só.** As conexões da mesa e as travas de cada partida ficam na memória do processo. Por isso o Game roda sem `--workers` e com um container só; com mais de um, jogadores da mesma partida deixariam de receber o estado uns dos outros. O estado das partidas fica no `game-redis` e sobrevive a um reinício do Game, e a mesa reconecta sozinha. Explicação completa em `services/game/app/partidas.py`.
-- **Bots.** Um nível só, o `"padrao"`. O bot de uma partida que a pessoa abandonou fica conectado esperando, como a partida (ela é apagada depois de 7 dias parada, e aí o bot desiste). Os pedidos de bot da fase 3 também são atendidos quando o serviço sobe pela primeira vez: os bots entram nessas partidas antigas e esperam as pessoas voltarem. Detalhes no [guia da mesa](docs/guia-backend-mesa.md), seção 10.7.
-- **Jogador que cai.** A partida espera ele voltar, sem prazo e sem bot no lugar (decisão do grupo).
-- **Partidas paradas.** Uma partida sem nenhuma mudança por 7 dias é apagada do `game-redis`.
-- **Lobby, Ranking e Bots também rodam com um processo só.** Cada um lê os eventos com um nome fixo no grupo dele (`lobby-1`, `ranking-1`, `bots-1`), para reler depois de um reinício o que tinha ficado sem confirmar. No Bots, é assim que os bots em jogo voltam para as partidas depois de um reinício.
-- **Game lento ao iniciar.** Se o Game criar a partida e a resposta não chegar ao Lobby em 5 segundos, o dono vê "Não foi possível iniciar a partida agora" e a sala continua aguardando; pode tentar de novo. A partida que o Game chegou a criar fica sem ninguém e é apagada depois de 7 dias parada.
-- **A sala depois da partida.** Quando a partida acaba, a sala passa a "encerrada" e sai da lista, mas continua sabendo qual foi a partida: quem estava nela e abrir o link antigo da sala vai para a mesa, que mostra o placar final.
-- **Histórico do jogador.** A rota `GET /api/ranking/jogadores/{id}` já responde as estatísticas e as últimas partidas ([guia do lobby](docs/guia-backend-lobby.md), seção 11.5); a tela que a mostra fica para a fase 6.
+Sem o bash (no PowerShell, por exemplo), os mesmos passos, a partir da raiz do repositório:
+
+```bash
+docker compose -p truco-testes up -d --build --wait auth game lobby ranking bots
+docker compose -p truco-testes run --rm --no-deps auth pytest
+docker compose -p truco-testes run --rm --no-deps game pytest
+docker compose -p truco-testes run --rm --no-deps lobby pytest
+docker compose -p truco-testes run --rm --no-deps ranking pytest
+docker compose -p truco-testes run --rm --no-deps bots pytest
+docker compose -p truco-testes down -v
+```
+
+O `-p truco-testes` é o que isola: sem ele, os comandos valem para o sistema em uso. Os testes de serviço dos Bots conferem isso e se recusam a rodar no projeto `truco-online`.
+
+O que cada suíte cobre:
+
+- **auth:** cadastro, login, `GET /api/auth/me`, os erros no formato do contrato e o `/saude`.
+- **game:** `tests/engine`, o motor de regras: cartas e manilhas, empates, carta coberta, truco, mão de onze, mão de ferro, a carta vencedora de cada rodada, a visão de cada jogador e partidas completas simuladas em 1x1 e 2x2 (roda também fora do Docker, só com o `pytest`: `pytest tests/engine`, dentro de `services/game`). `tests/app`, a camada de serviço com os dois Redis: a rota interna, os eventos (inclusive com o broker fora do ar), o WebSocket com os fechamentos 4401, 4403, 4404 e 4409, a reconexão, a pausa entre as mãos, o fim da partida e o token fora do log.
+- **lobby:** as rotas e a ordem dos erros, as travas com pedidos ao mesmo tempo, a presença, o início da partida com um Game falso (fora do ar, lento ou respondendo errado), a entrega do `bot.solicitado` com o broker fora do ar e a leitura do `partida.finalizada` (repetido, fora do formato, com o serviço parado).
+- **ranking:** o ranking com empates, o histórico do jogador e a leitura do `partida.finalizada`, inclusive publicado antes de o serviço existir.
+- **bots:** `tests/estrategia`, a estratégia do bot, sem rede (roda também fora do Docker: `pytest tests/estrategia`, dentro de `services/bots`). `tests/servico`, com os serviços no ar: uma partida 1x1 de uma pessoa contra um bot e uma 2x2 de uma pessoa com três bots, criadas pelo Lobby e jogadas até o fim pelo container `bots`; o serviço caindo no meio de uma partida, com o bot voltando a jogar; e o mesmo pedido de bot chegando várias vezes sem criar outro bot.
+
+Dentro do ambiente de testes, cada suíte ainda usa bancos próprios: `auth_teste`, `lobby_teste` e `ranking_teste` nos Postgres e bancos lógicos separados nos Redis (1 no Game, 2 no Lobby, 3 no Ranking e 4 nos Bots). Detalhes no [guia da mesa](docs/guia-backend-mesa.md), seção 10.7, e no [guia do lobby](docs/guia-backend-lobby.md), seção 11.6.
+
+## Limitações conhecidas
+
+- **Um processo por serviço.** O Game guarda as conexões da mesa e as travas de cada partida na memória do processo; Lobby, Ranking e Bots leem os eventos com um nome fixo de consumidor (`lobby-1`, `ranking-1`, `bots-1`), para reler o que tinha ficado sem confirmar depois de um reinício. Por isso cada serviço roda sem `--workers` e com um container só. O estado das partidas fica no `game-redis` e sobrevive a um reinício do Game, e a mesa reconecta sozinha. Explicação completa em `services/game/app/partidas.py`.
+- **Partida órfã quando o Game demora a responder ao Lobby.** Se o Game criar a partida e a resposta não chegar ao Lobby em 5 segundos, o dono vê "Não foi possível iniciar a partida agora" e a sala continua aguardando; pode tentar de novo. A partida que o Game chegou a criar fica sem ninguém e é apagada depois de 7 dias parada.
+- **Jogador desconectado sem indicador.** Quem cai ou fecha a aba não é substituído: a partida espera ele voltar, sem prazo e sem bot no lugar (decisão do grupo). A mesa dos outros não mostra quem está desconectado; eles só veem a vez parada.
+- **Bots só no nível `"padrao"`.** O Lobby recusa outro nível, e um nível novo precisa entrar no Lobby e no serviço de Bots. O bot de uma partida que a pessoa abandonou fica conectado esperando, como a partida.
+- **Mão de ferro sem cartas às cegas.** Com 11 a 11, a mão é jogada com as cartas à vista, valendo 1 e sem truco (decisão do grupo); quem vencer chega a 12.
+- **Partidas paradas.** Uma partida sem nenhuma mudança por 7 dias é apagada do `game-redis`; o link dela passa a mostrar "Esta partida não existe.".
+- **Logout só no navegador.** Sair apaga o token do navegador, mas não existe rota de logout: o token continua valendo até vencer (24 horas).
+- **Nomes repetidos.** O nome não precisa ser único (até 20 caracteres, cortado com reticências quando não cabe na tela) e não pode ser trocado depois do cadastro. Dois jogadores com o mesmo nome na mesma mesa se confundem no chat, que identifica o autor pelo nome.
+- **Sem HTTPS.** O gateway atende só HTTP: em outra máquina da rede, a senha e o token passam sem criptografia (o Firefox avisa isso no console da tela de login). O log de erros do Nginx, quando o Game está fora do ar, registra o pedido do WebSocket com o token.
+- **Tempo limite da tela.** A tela desiste de uma requisição depois de 10 segundos. Um cadastro que demore mais pode criar a conta e mostrar falha de conexão; na nova tentativa, aparece "e-mail já cadastrado", e basta entrar.
+
+## Documentação
+
+- [Guia do login](docs/guia-backend-login.md): o serviço Auth, as rotas, os erros, as senhas e o JWT.
+- [Guia do lobby](docs/guia-backend-lobby.md): os serviços Lobby e Ranking, as regras das salas, os eventos e o histórico.
+- [Guia da mesa](docs/guia-backend-mesa.md): o serviço Game, o protocolo do WebSocket, as regras adotadas e o serviço de Bots.
+
+Cada guia começa pelo que a tela espera do serviço e termina numa seção com o que a implementação decidiu e os pontos que ficaram em aberto.
 
 ## Divisão de tarefas
 

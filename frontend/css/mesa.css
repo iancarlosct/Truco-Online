@@ -148,8 +148,13 @@ body {
   box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.35);
 }
 
+/* Nome longo cortado com reticências (o nome inteiro fica no title), para a plaquinha não
+   invadir o centro da mesa nem empurrar os selos */
 .plaquinha .nome {
+  max-width: 150px;
+  overflow: hidden;
   font-weight: 600;
+  text-overflow: ellipsis;
 }
 
 .plaquinha .voce {
@@ -368,8 +373,8 @@ body {
   --giro: 6deg;
 }
 
-/* Rodada decidida: as cartas do time vencedor vêm para a frente, sobem um pouco e ganham um
-   contorno na cor do time */
+/* Rodada decidida: a carta vencedora vem para a frente, sobe um pouco e ganha um contorno na
+   cor do time */
 .jogada.vencedora {
   z-index: 1;
   translate: 0 calc(var(--l) * -0.1);
@@ -739,9 +744,12 @@ body {
 
 .chat-mensagem .autor {
   display: block;
+  overflow: hidden;
   color: var(--cor-time, var(--texto-suave));
   font-size: 12px;
   font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .chat-vazio {
@@ -1007,31 +1015,4 @@ body {
   overflow: hidden;
   clip-path: inset(50%);
   white-space: nowrap;
-}
-
-/* ---------- Seletor de mock (FERRAMENTA DE DESENVOLVIMENTO: remover depois) ---------- */
-
-/* Abaixo do botão de sair, no mesmo canto */
-.dev-seletor-mock {
-  position: fixed;
-  top: 86px;
-  right: calc(var(--largura-chat) + 40px);
-  z-index: 10;
-  padding: 1px 4px;
-  border: 1px dashed rgba(251, 248, 241, 0.5);
-  border-radius: 4px;
-  background: rgba(0, 0, 0, 0.55);
-  color: var(--texto);
-  font-size: 11px;
-  opacity: 0.45;
-  transition: opacity 0.15s ease;
-}
-
-.dev-seletor-mock:hover,
-.dev-seletor-mock:focus {
-  opacity: 1;
-}
-
-.dev-seletor-mock option {
-  color: #000;
 }
