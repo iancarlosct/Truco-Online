@@ -1,17 +1,14 @@
 """SÓ PARA DESENVOLVIMENTO: cria uma partida 1x1 entre dois usuários de teste, sem o Lobby.
 
-Enquanto o Lobby é simulado no navegador, as partidas que ele "cria" não existem no Game. Este
-script faz o papel do Lobby para testar a mesa com o Game de verdade. Ele roda dentro do
-container do Game, que enxerga o gateway e a rota interna:
+Faz o papel do Lobby para testar a mesa e o Game sem criar sala. Roda dentro do container do
+Game, que enxerga o gateway e a rota interna:
 
     docker compose exec game python scripts/partida_de_teste.py
     docker compose exec game python scripts/partida_de_teste.py --porta 8080   # GATEWAY_PORTA
 
 1. Cadastra os dois usuários no Auth, pelo gateway (se já existem, só faz o login).
-2. Cria a partida em POST /interno/partidas, a rota que o Lobby vai chamar.
+2. Cria a partida em POST /interno/partidas, a mesma rota que o Lobby chama.
 3. Imprime o que abrir no navegador: a mesa de cada jogador, com o e-mail e a senha.
-
-Para a mesa conectar no Game, mude USAR_MOCK_GAME para false em frontend/js/ws.js (README).
 """
 
 import argparse
@@ -95,7 +92,6 @@ def main() -> None:
         print(f"  1. Entre em   http://{host}{sufixo}/")
         print(f"  2. Depois abra http://{host}{sufixo}/mesa.html?partida={partida_id}\n")
     print("Os dois endereços são diferentes de propósito: cada um guarda a sessão de um jogador.")
-    print("Lembre de pôr USAR_MOCK_GAME = false em frontend/js/ws.js (e de voltar para true depois).")
 
 
 if __name__ == "__main__":
