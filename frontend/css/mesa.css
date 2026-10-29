@@ -1016,30 +1016,3 @@ body {
   clip-path: inset(50%);
   white-space: nowrap;
 }
-
-/* ---------- Seletor de mock (FERRAMENTA DE DESENVOLVIMENTO: remover depois) ---------- */
-
-/* Abaixo do botão de sair, no mesmo canto */
-.dev-seletor-mock {
-  position: fixed;
-  top: 86px;
-  right: calc(var(--largura-chat) + 40px);
-  z-index: 10;
-  padding: 1px 4px;
-  border: 1px dashed rgba(251, 248, 241, 0.5);
-  border-radius: 4px;
-  background: rgba(0, 0, 0, 0.55);
-  color: var(--texto);
-  font-size: 11px;
-  opacity: 0.45;
-  transition: opacity 0.15s ease;
-}
-
-.dev-seletor-mock:hover,
-.dev-seletor-mock:focus {
-  opacity: 1;
-}
-
-.dev-seletor-mock option {
-  color: #000;
-}

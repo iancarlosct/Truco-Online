@@ -4,12 +4,11 @@
 // conforme o estado recebido; quem valida as ações é o servidor.
 // A página abre como mesa.html?partida={partida_id} (o lobby manda para cá quando a partida
 // começa) e conversa com o Game pelo ws.js. Até o primeiro estado chegar, mostra só uma espera.
-// Sem ?partida=, mostra os estados falsos do seletor de desenvolvimento.
+// Sem ?partida=, volta ao lobby.
 
 import { prepararAnimacoes } from "../animacoes.js";
 import { exigirLogin } from "../auth.js";
 import { criarCarta, criarVerso, proximaManilha } from "../cartas.js";
-import * as mocks from "../mock/estados.js";
 import { conectarPartida } from "../ws.js";
 
 const PAGINA_LOBBY = "lobby.html";
@@ -37,7 +36,7 @@ const anuncio = document.getElementById("anuncio");
 // Último estado desenhado (usado para redesenhar quando muda algo local, como "Jogar coberta").
 let estadoAtual = null;
 
-// Conexão com a partida ({ enviar, fechar }, do ws.js). Fica null com os estados falsos.
+// Conexão com a partida ({ enviar, fechar }, do ws.js).
 let conexao = null;
 
 // Estado local da interface, que não vem do servidor.
@@ -45,8 +44,8 @@ const ui = {
   coberta: false,
   rascunhoChat: "",
   focoChat: false,
-  // "conectando", "conectado", "reconectando" ou "recusada"; "local" com os estados falsos
-  conexao: "local",
+  // "conectando", "conectado", "reconectando" ou "recusada"
+  conexao: "conectando",
   motivoRecusa: "",
   erro: null, // mensagem do último erro do servidor, enquanto estiver na tela
   confirmandoSaida: false,
@@ -80,7 +79,7 @@ function derivar(estado) {
   const truco = maoAtual.truco_pendente;
   const minhaVez = maoAtual.vez_assento === estado.meu_assento;
   const encerrada = estado.status === "encerrada";
-  const conectado = ui.conexao === "conectado" || ui.conexao === "local";
+  const conectado = ui.conexao === "conectado";
   // Com a conexão caída ou a partida encerrada, nenhum controle de jogo fica clicável.
   const podeAgir = conectado && !encerrada;
   // Rodada que a próxima carta joga. A rodada nova só entra em "rodadas" com a primeira carta
@@ -123,12 +122,10 @@ function derivar(estado) {
 
 // ---------- Envio de ações ----------
 
-// Único ponto de saída das ações do jogador: vai pela conexão com a partida. Com os estados
-// falsos, que não têm conexão, só registra no console. Devolve false se a mensagem não saiu.
-export function enviar(mensagem) {
-  if (conexao) return conexao.enviar(mensagem);
-  console.log("[enviar]", mensagem);
-  return true;
+// Único ponto de saída das ações do jogador: vai pela conexão com a partida. Devolve false se
+// a mensagem não saiu.
+function enviar(mensagem) {
+  return conexao.enviar(mensagem);
 }
 
 function jogarCarta(carta) {
@@ -665,36 +662,15 @@ function entrarNaPartida(partidaId) {
   });
 }
 
-// =====================================================================================
-// FERRAMENTA DE DESENVOLVIMENTO — REMOVER junto com os estados falsos (mock/estados.js).
-// Sem ?partida= na URL, um seletor discreto no canto da mesa alterna entre os estados falsos.
-// O mock escolhido fica no hash da URL (ex.: mesa.html#meio2x2) para sobreviver ao F5.
-// =====================================================================================
-function montarSeletorMock() {
-  const nomes = Object.keys(mocks);
-  const inicial = nomes.includes(location.hash.slice(1)) ? location.hash.slice(1) : nomes[0];
-
-  const seletor = el("select", "dev-seletor-mock");
-  seletor.title = "Mock (ferramenta de desenvolvimento)";
-  for (const nome of nomes) {
-    const opcao = el("option", "", nome);
-    opcao.value = nome;
-    seletor.append(opcao);
-  }
-  seletor.value = inicial;
-  seletor.addEventListener("change", () => {
-    location.hash = seletor.value;
-    ui.coberta = false;
-    renderizarMesa(mocks[seletor.value]);
-  });
-  document.body.append(seletor);
-
-  renderizarMesa(mocks[inicial]);
-}
-
 // ---------- Início ----------
 
 function iniciar() {
+  const partidaId = new URLSearchParams(location.search).get("partida");
+  if (!partidaId) {
+    location.replace(PAGINA_LOBBY);
+    return;
+  }
+
   document.addEventListener("keydown", (evento) => {
     if (evento.key === "Escape" && ui.confirmandoSaida) cancelarSaida();
   });
@@ -704,9 +680,7 @@ function iniciar() {
     if (evento.persisted) location.reload();
   });
 
-  const partidaId = new URLSearchParams(location.search).get("partida");
-  if (partidaId) entrarNaPartida(partidaId);
-  else montarSeletorMock();
+  entrarNaPartida(partidaId);
 }
 
 // A mesa exige login: sem sessão, exigirLogin() manda para a tela de login e a mesa não é montada.
