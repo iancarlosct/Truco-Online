@@ -2,7 +2,7 @@
 
 Jogo de truco paulista online, com partidas 1x1 e 2x2 contra pessoas ou bots. Trabalho da disciplina Engenharia de Software (UFAL).
 
-Requisitos completos, contratos das APIs e formato das mensagens: [documento de requisitos e contratos](https://claude.ai/code/artifact/37cda24d-3d94-4e3d-93b8-99790ba8252e).
+Requisitos funcionais e não funcionais, contratos das APIs e formato das mensagens: [requisitos e contratos](docs/requisitos-e-contratos.md).
 
 ## Visão geral
 
@@ -157,7 +157,7 @@ Espere o `docker compose ps` mostrar os serviços e os bancos como `healthy` (un
 
 Abra `http://localhost` (ou `http://localhost:<GATEWAY_PORTA>`).
 
-### Comandos do dia a dia
+### Comandos úteis
 
 | Comando | O que faz |
 |---|---|
@@ -167,7 +167,6 @@ Abra `http://localhost` (ou `http://localhost:<GATEWAY_PORTA>`).
 | `docker compose down` | Para e remove os containers. Os usuários, as salas, as partidas, o ranking e os eventos continuam nos volumes |
 | `docker compose down -v` | Para e **apaga também os volumes** (veja [Limpar os dados](#limpar-os-dados)) |
 
-- Mudanças em `frontend/` valem no próximo F5: o gateway lê os arquivos direto da pasta. Mudanças no `gateway/nginx.conf` pedem `docker compose restart gateway`, e mudanças no código de um serviço, `docker compose up --build -d`.
 - As páginas de testes do FastAPI (o `/docs`) abrem pelo gateway: `http://localhost/api/auth/docs`, `http://localhost/api/lobby/docs` e `http://localhost/api/ranking/docs`. A do Game fica em `/interno/docs`, fora do gateway.
 - Para olhar dentro dos Redis: `docker compose exec game-redis redis-cli --scan --pattern 'partida:*'` lista as partidas; `docker compose exec eventos redis-cli XRANGE partida.finalizada - +` mostra os eventos de fim de partida, `XRANGE bot.solicitado - +`, os pedidos de bot, e `XPENDING bot.solicitado bots`, quantos bots estão em jogo (os pedidos que o serviço de Bots ainda não confirmou).
 - Para olhar dentro dos Postgres: `docker compose exec lobby-db sh -c 'psql -U "$POSTGRES_USER" "$POSTGRES_DB"'` (troque por `ranking-db` ou `auth-db`).
@@ -216,7 +215,7 @@ Para acompanhar os bots: `docker compose logs -f bots` mostra cada bot que entra
 
 ### Uma partida sem passar pelo Lobby
 
-O script de desenvolvimento do Game cria uma partida 1x1 direto na rota interna `POST /interno/partidas`, a mesma que o Lobby chama:
+O script de teste do Game cria uma partida 1x1 direto na rota interna `POST /interno/partidas`, a mesma que o Lobby chama:
 
 ```bash
 docker compose exec game python scripts/partida_de_teste.py
@@ -276,34 +275,9 @@ Dentro do ambiente de testes, cada suíte ainda usa bancos próprios: `auth_test
 
 ## Documentação
 
+- [Requisitos e contratos](docs/requisitos-e-contratos.md): os requisitos funcionais e não funcionais, as rotas REST, o protocolo do WebSocket, os eventos e o estado da partida.
 - [Guia do login](docs/guia-backend-login.md): o serviço Auth, as rotas, os erros, as senhas e o JWT.
 - [Guia do lobby](docs/guia-backend-lobby.md): os serviços Lobby e Ranking, as regras das salas, os eventos e o histórico.
 - [Guia da mesa](docs/guia-backend-mesa.md): o serviço Game, o protocolo do WebSocket, as regras adotadas e o serviço de Bots.
 
 Cada guia começa pelo que a tela espera do serviço e termina numa seção com o que a implementação decidiu e os pontos que ficaram em aberto.
-
-## Divisão de tarefas
-
-| Pessoa | Responsabilidade |
-|---|---|
-| A | Motor de regras (`game/engine`) com testes, depois o serviço de Bots |
-| B | Auth, Lobby, Ranking, camada de serviço do Game, Docker Compose e Nginx |
-| C | Frontend completo: login, lobby, mesa, animações e chat |
-
-## Cronograma
-
-| Dias | Entrega |
-|---|---|
-| 1 a 3 | Requisitos, contratos, repositório e Docker Compose subindo |
-| 4 a 7 | Desenvolvimento em paralelo. **Meta: uma partida 1x1 completa entre dois navegadores** |
-| 8 a 11 | 2x2, mão de onze e de ferro, bots, chat, ranking, acabamento visual |
-| 12 a 14 | Correção de bugs, documentação e apresentação |
-
-Se a meta do dia 7 atrasar, simplificamos primeiro o visual e depois as regras especiais.
-
-## Fluxo de trabalho no Git
-
-1. Nunca commitar direto na `main`.
-2. Crie uma branch por tarefa: `feature/nome-da-tarefa`.
-3. Abra um Pull Request para a `main`.
-4. Outro membro revisa e aprova antes do merge.
